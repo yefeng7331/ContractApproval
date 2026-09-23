@@ -1,6 +1,6 @@
 # 核心业务流程与状态约束
 
-状态：待用户验收；流程设计，尚未实现。范围和验收以 [MVP SPEC](MVP_SPEC.md) 为准；数据与接口以 [后端设计](BACKEND_DESIGN.md) 为准。
+状态：待用户验收；流程设计，其中本地上传接入和任务持久化已实施、待功能验收，其余步骤尚未实现。范围和验收以 [MVP SPEC](MVP_SPEC.md) 为准；数据与接口以 [后端设计](BACKEND_DESIGN.md) 为准。当前证据见[实施状态](IMPLEMENTATION_STATUS.md)。
 
 ## 1. 术语
 
