@@ -1,4 +1,4 @@
-"""Generate the v0.2 pen.dev design board from the documented UI contract.
+"""Generate the v0.3 pen.dev design board from the documented UI contract.
 
 This creates design data only; it is not a frontend implementation.
 """
@@ -12,7 +12,7 @@ OUT = ROOT / "pencil-new.pen"
 
 C = {
     "paper": "#F4F6F3", "white": "#FFFFFF", "ink": "#172B25",
-    "muted": "#53635B", "faint": "#68786F", "line": "#D9E2DA",
+    "muted": "#53635B", "faint": "#5E6E65", "line": "#D9E2DA",
     "accent": "#1D6953", "accent_soft": "#E5F1EA", "nav": "#11261F",
     "nav_muted": "#B8C8BF", "red": "#9E433A", "red_soft": "#F8ECE8",
     "amber": "#8A6226", "amber_soft": "#F5EEDD", "gray_soft": "#EFF2EE",
@@ -107,7 +107,7 @@ def shell(parent, title, role, active="任务大盘", width=1440):
         text(parent, "nav " + label, 32, yy, 160, label, 14,
              C["white"] if label == active else C["nav_muted"], "600" if label == active else "400")
     rule(parent, "nav footer divider", 26, 801, 168, "#35514A")
-    text(parent, "nav demo notice", 28, 819, 178, "合成数据演示版 · v0.2 设计", 11, C["nav_muted"])
+    text(parent, "nav demo notice", 28, 819, 178, "合成数据演示版 · v0.3 设计", 11, C["nav_muted"])
     text(parent, "page title", 266, 32, 850, title, 28, C["ink"], "700")
     pill(parent, "role", width - 184, 34, 136, role, C["accent_soft"], C["accent"])
     rule(parent, "header separator", 266, 82, width - 312)
@@ -153,50 +153,53 @@ text(p, "login error", 822, 662, 380, "错误状态示例 · 账号或密码不�
 text(p, "login error action", 822, 684, 380, "请核对后重试。", 12, C["red"])
 
 # 02 — Business dashboard
-p = frame(children, "02 任务大盘 · 业务经办人", 1680, 0, 1440, 900, C["paper"])
-shell(p, "任务大盘", "业务经办人")
+p = frame(children, "02 任务大盘 · 业务经办人", 1680, 0, 1600, 900, C["paper"])
+shell(p, "任务大盘", "业务经办人", width=1600)
 text(p, "dashboard hint", 267, 105, 735, "查看本人合同的处理进度与已确认结果", 14, C["muted"])
-button(p, "import mock", 1005, 103, 147, "导入模拟待办")
-button(p, "upload", 1164, 103, 230, "上传合成合同", True)
+button(p, "import mock", 1162, 103, 147, "导入模拟待办")
+button(p, "upload", 1321, 103, 227, "上传合成合同", True)
 text(p, "overview heading", 266, 173, 700, "先看进度，再看结论。", 30, C["ink"], "700")
 text(p, "overview note", 267, 224, 1000,
      "当前版本的处理状态与历史已确认结果分开呈现；尚未确认的草稿不作为正式结论。", 14, C["muted"])
-rule(p, "overview top rule", 266, 266, 1128, C["line_strong"])
+rule(p, "overview top rule", 266, 266, 1282, C["line_strong"])
 for xx, heading, detail, marker in [
     (267, "待法务确认", "2 份 · 草稿仅法务可见", C["amber"]),
-    (641, "报告可用", "1 份 · 同版已确认", C["accent"]),
-    (1016, "处理受阻", "1 份 · 查看恢复路径", C["red"]),
+    (692, "报告可用", "1 份 · 同版已确认", C["accent"]),
+    (1117, "处理受阻", "1 份 · 查看恢复路径", C["red"]),
 ]:
     rect(p, "overview marker", xx, 288, 8, 8, marker, 4)
     text(p, "overview state", xx + 18, 278, 250, heading, 15, C["ink"], "700")
     text(p, "overview detail", xx + 18, 305, 325, detail, 12, C["muted"])
-rule(p, "overview bottom rule", 266, 336, 1128, C["line_strong"])
+rule(p, "overview bottom rule", 266, 336, 1282, C["line_strong"])
 text(p, "task section", 266, 363, 480, "我的合同", 20, C["ink"], "700")
-text(p, "table count", 1296, 369, 98, "共 4 项", 12, C["muted"])
+text(p, "table count", 1450, 369, 98, "共 4 项", 12, C["muted"])
 rect(p, "filter status", 266, 410, 184, 38, C["white"], 9, C["line"])
 text(p, "filter status text", 281, 420, 150, "状态：全部  ▾", 13, C["ink"])
 rect(p, "filter risk", 462, 410, 184, 38, C["white"], 9, C["line"])
 text(p, "filter risk text", 477, 420, 150, "风险：全部  ▾", 13, C["ink"])
-rect(p, "table", 266, 467, 1128, 355, C["white"], 12, C["line"])
-rect(p, "table header", 267, 468, 1126, 48, C["gray_soft"], 11)
-for xx, label in [(288, "合同 / 申请人"), (664, "金额"), (782, "机器审查"), (916, "法务复核"), (1044, "模拟回写"), (1192, "当前正式等级")]:
-    text(p, "column " + label, xx, 482, 184, label, 12, C["muted"], "600")
+rect(p, "table", 266, 467, 1282, 355, C["white"], 12, C["line"])
+rect(p, "table header", 267, 468, 1280, 48, C["gray_soft"], 11)
+columns = [(288, 239, "合同名称"), (540, 88, "申请人"), (642, 100, "业务类型"),
+           (755, 104, "金额"), (870, 108, "创建时间"), (989, 104, "机器审查"),
+           (1102, 102, "法务复核"), (1215, 115, "模拟回写"), (1342, 174, "当前正式等级")]
+for xx, ww, label in columns:
+    text(p, "column " + label, xx, 482, ww, label, 12, C["muted"], "600")
 rows = [
-    ("软件采购合同 A · 张明", "¥ 480,000", "草稿完成", "待复核", "未回写", "—", "文档 V2 · 旧版已确认 V1"),
-    ("软件采购合同 B · 李晴", "¥ 260,000", "已完成", "已确认", "模拟成功", "高", "文档 V1 · 审查 V1"),
-    ("软件采购合同 C · 张明", "¥ 320,000", "解析中", "待复核", "未回写", "—", "文档 V1 · 当前无结论"),
-    ("软件采购合同 D · 李晴", "¥ 175,000", "受阻", "待复核", "未回写", "—", "文档 V1 · 附件加密"),
+    ("软件采购合同 A", "张明", "软件采购", "¥ 480,000", "09-23 10:32", "草稿完成", "待复核", "未回写", "—", "文档 V2 · 旧版已确认 V1"),
+    ("软件采购合同 B", "李晴", "软件采购", "¥ 260,000", "09-22 15:10", "已完成", "已确认", "模拟成功", "高", "文档 V1 · 审查 V1"),
+    ("软件采购合同 C", "张明", "软件采购", "¥ 320,000", "09-23 09:18", "解析中", "待复核", "未回写", "—", "文档 V1 · 当前无结论"),
+    ("软件采购合同 D", "李晴", "软件采购", "¥ 175,000", "09-22 11:45", "受阻", "待复核", "未回写", "—", "文档 V1 · 附件加密"),
 ]
 for i, row in enumerate(rows):
     yy = 516 + i * 76
     if i:
-        rule(p, "row divider", 283, yy, 1093)
-    text(p, "contract", 288, yy + 13, 350, row[0], 14, C["ink"], "600")
-    text(p, "version note", 288, yy + 38, 350, row[6], 11, C["muted"])
-    for xx, val, ww in [(664, row[1], 112), (782, row[2], 130), (916, row[3], 122), (1044, row[4], 145), (1192, row[5], 120)]:
+        rule(p, "row divider", 283, yy, 1248)
+    text(p, "contract", 288, yy + 13, 239, row[0], 13, C["ink"], "600")
+    text(p, "version note", 288, yy + 38, 239, row[9], 11, C["muted"])
+    for (xx, ww, _), val in zip(columns[1:], row[1:9]):
         color = C["red"] if val in ("受阻", "高") else C["accent"] if val in ("已确认", "模拟成功") else C["ink"]
-        text(p, "row state", xx, yy + 25, ww, val, 13, color, "600")
-text(p, "dashboard disclaimer", 266, 842, 1120, "画板中的名称、金额及状态为合成示意；接口和权限仍需实施与验证。", 11, C["muted"])
+        text(p, "row state", xx, yy + 25, ww, val, 12, color, "600")
+text(p, "dashboard disclaimer", 266, 842, 1280, "画板中的名称、金额及状态为合成示意；类型与金额来自后续解析，接口和权限仍需实施与验证。", 11, C["muted"])
 
 # 03 — Legal workbench
 p = frame(children, "03 双栏审查工作台 · 法务", 3360, 0, 1600, 900, C["paper"])
@@ -229,7 +232,7 @@ text(p, "rule id", 1075, 397, 438, "企业规则  DEMO-PAY-01  ·  版本 1", 11
 text(p, "quoted source", 1075, 421, 440, "原文：“到货后五个工作日内一次性支付全部价款”\n关联缺失：验收条款未找到", 12, C["ink"])
 rect(p, "draft advice", 1074, 476, 450, 75, C["gray_soft"], 7)
 text(p, "draft advice text", 1087, 486, 424, "模型建议 · 草稿\n建议法务考虑按可核验交付与验收节点付款。", 12, C["muted"])
-text(p, "legal input label", 1075, 566, 442, "法务意见 · 待保存", 12, C["ink"], "600")
+text(p, "legal input label", 1075, 566, 442, "法务意见 · 已保存至审查草稿 V1", 12, C["ink"], "600")
 rect(p, "legal input", 1074, 590, 450, 78, C["white"], 7, C["line"])
 text(p, "legal input example", 1087, 603, 424, "建议补充可执行验收条件，再确定付款节点。", 12, C["ink"])
 button(p, "copy suggestion", 1074, 686, 132, "复制建议")
@@ -286,7 +289,7 @@ text(p, "writeback heading", 266, 539, 650, "模拟回写", 20, C["ink"], "700")
 text(p, "writeback explanation", 266, 571, 1090, "只向本地模拟审批单的评论区写入已确认版本；不连接真实平台。", 13, C["muted"])
 rect(p, "writeback panel", 266, 617, 1128, 172, C["white"], 12, C["line"])
 text(p, "writeback target label", 290, 638, 360, "目标模拟审批单", 11, C["muted"], "600")
-text(p, "writeback target", 290, 660, 420, "MOCK-2026-0098", 16, C["ink"], "700")
+text(p, "writeback target", 290, 660, 420, "demo-f1-001", 16, C["ink"], "700")
 text(p, "writeback version", 290, 700, 500, "引用版本：文档 V1 · 已确认审查 V1", 12, C["muted"])
 rect(p, "writeback divider", 828, 639, 1, 129, C["line"])
 pill(p, "writeback failed", 853, 638, 86, "首次失败", C["red_soft"], C["red"])
@@ -323,10 +326,10 @@ rect(p, "admin boundary", 266, 757, 1128, 79, C["accent_soft"], 10)
 text(p, "admin boundary text", 286, 775, 1076,
      "权限边界  ·  管理员仅重试允许的暂时故障；不可代法务确认或回写，也不可自行提高模型预算。", 13, C["accent"], "600")
 
-# 07 — The visual system makes v0.2's hierarchy and states explicit
-p = frame(children, "07 视觉规范 · v0.2", 0, 2080, 1440, 900, C["white"])
+# 07 — The visual system makes v0.3's hierarchy and states explicit
+p = frame(children, "07 视觉规范 · v0.3", 0, 2080, 1440, 900, C["white"])
 text(p, "system heading", 64, 50, 980, "合同审查 · 界面规范", 31, C["ink"], "700")
-pill(p, "system version", 1234, 54, 140, "DESIGN  v0.2", C["accent_soft"], C["accent"])
+pill(p, "system version", 1234, 54, 140, "DESIGN  v0.3", C["accent_soft"], C["accent"])
 text(p, "system summary", 65, 100, 1160,
      "一套适用于三角色工作台的克制视觉语言：以证据、版本与状态为核心。", 15, C["muted"])
 rule(p, "system opening rule", 64, 145, 1312, C["line_strong"])
@@ -396,12 +399,12 @@ text(p, "file label", 290, 428, 450, "已选择的合成附件", 12, C["muted"],
 rect(p, "file selected", 290, 453, 602, 58, C["accent_soft"], 9)
 text(p, "file name", 309, 467, 450, "软件采购合同_F1.docx", 14, C["ink"], "600")
 text(p, "file details", 309, 490, 450, "DOCX  ·  合成测试样本  ·  待提交", 11, C["muted"])
-text(p, "type field label", 290, 535, 240, "业务类型", 12, C["muted"], "600")
-rect(p, "type field", 290, 561, 286, 43, C["white"], 8, C["line"])
-text(p, "type value", 305, 571, 255, "软件采购", 13, C["ink"])
-text(p, "amount field label", 606, 535, 240, "合同金额", 12, C["muted"], "600")
-rect(p, "amount field", 606, 561, 286, 43, C["white"], 8, C["line"])
-text(p, "amount value", 621, 571, 255, "¥ 480,000", 13, C["ink"])
+text(p, "department field label", 290, 535, 240, "送审部门", 12, C["muted"], "600")
+rect(p, "department field", 290, 561, 286, 43, C["white"], 8, C["line"])
+text(p, "department value", 305, 571, 255, "采购部", 13, C["ink"])
+text(p, "applicant field label", 606, 535, 240, "申请人", 12, C["muted"], "600")
+rect(p, "applicant field", 606, 561, 286, 43, C["white"], 8, C["line"])
+text(p, "applicant value", 621, 571, 255, "张明", 13, C["ink"])
 button(p, "create task", 732, 634, 160, "创建审查任务", primary=True)
 text(p, "upload disclaimer", 290, 646, 430,
      "文件类型与大小由服务端校验；失败时保留本页说明。", 11, C["muted"])
@@ -412,10 +415,10 @@ pill(p, "mock label", 1276, 170, 94, "模拟入口", C["amber_soft"], C["amber"]
 text(p, "mock description", 964, 210, 390,
      "仅演示从待办读取合成附件及审批单信息。", 12, C["muted"])
 rule(p, "mock divider", 964, 249, 406)
-text(p, "mock id", 964, 273, 300, "MOCK-2026-0098", 15, C["ink"], "700")
+text(p, "mock id", 964, 273, 300, "demo-f1-001", 15, C["ink"], "700")
 pill(p, "mock pending status", 1255, 268, 115, "待导入", C["gray_soft"], C["muted"])
 text(p, "mock title", 964, 310, 390, "软件采购合同 A · 采购申请", 14, C["ink"], "600")
-text(p, "mock metadata", 964, 346, 390, "申请人  张雨  ·  金额  ¥ 480,000", 12, C["muted"])
+text(p, "mock metadata", 964, 346, 390, "申请人  张明  ·  送审部门  采购部", 12, C["muted"])
 text(p, "mock attachment", 964, 378, 390, "附件  软件采购合同_F1.docx", 12, C["muted"])
 rect(p, "mock callout", 964, 437, 406, 81, C["amber_soft"], 9)
 text(p, "mock callout text", 981, 450, 372,
@@ -429,7 +432,7 @@ text(p, "created warning", 288, 786, 1060,
      "已接收只代表任务创建成功；机器审查、法务确认与模拟回写继续分别显示，不提前标记为完成。", 13, C["muted"])
 
 # 09 — State specimens for the paths most likely to mislead users
-p = frame(children, "09 关键状态与恢复 · v0.2", 3360, 2080, 1440, 900, C["white"])
+p = frame(children, "09 关键状态与恢复 · v0.3", 3360, 2080, 1440, 900, C["white"])
 text(p, "edge heading", 64, 50, 1190, "把边界说清楚", 31, C["ink"], "700")
 text(p, "edge intro", 65, 100, 1250,
      "关键状态示例：先解释发生了什么，再给出当前角色可执行的下一步。", 15, C["muted"])
@@ -477,6 +480,62 @@ text(p, "blocked action specimen", 762, 767, 560, "查看恢复指引  →", 13,
 rule(p, "edge footer rule", 64, 817, 1312, C["line_strong"])
 text(p, "edge footer", 64, 836, 1260,
      "加载中使用与内容同形的占位；空列表引导接入合同；提交中禁用重复操作。", 13, C["muted"])
+
+# 10 — Draw the operational states rather than leaving them as footer copy.
+p = frame(children, "10 操作反馈与编辑保护 · v0.3", 0, 3120, 1440, 900, C["paper"])
+text(p, "feedback heading", 64, 47, 1040, "每一步，都有明确反馈。", 32, C["ink"], "700")
+pill(p, "feedback version", 1246, 55, 130, "DESIGN v0.3", C["accent_soft"], C["accent"])
+text(p, "feedback intro", 65, 103, 1280,
+     "空列表、加载、未保存修改与版本冲突的具体呈现；动作与原因始终在同一视线内。", 15, C["muted"])
+rule(p, "feedback heading rule", 64, 151, 1312, C["line_strong"])
+
+rect(p, "empty specimen", 64, 185, 630, 276, C["white"], 12, C["line"])
+text(p, "empty eyebrow", 90, 207, 560, "业务经办人  /  我的合同", 12, C["muted"], "600")
+rule(p, "empty rule", 90, 239, 578)
+rect(p, "empty icon outer", 326, 263, 104, 69, C["paper"], 12, C["line"])
+rect(p, "empty icon paper", 362, 278, 32, 39, C["white"], 4, C["line_strong"])
+rect(p, "empty icon line", 369, 290, 18, 2, C["accent"], 1)
+rect(p, "empty icon line", 369, 298, 14, 2, C["accent"], 1)
+text(p, "empty title", 227, 346, 300, "还没有合同任务", 18, C["ink"], "700")
+text(p, "empty explanation", 158, 376, 440, "上传合成合同，或导入固定模拟待办开始演示。", 13, C["muted"])
+button(p, "empty action", 303, 414, 151, "上传合成合同", True)
+
+rect(p, "loading specimen", 720, 185, 656, 276, C["white"], 12, C["line"])
+text(p, "loading eyebrow", 746, 207, 570, "任务大盘  /  正在读取", 12, C["muted"], "600")
+rule(p, "loading rule", 746, 239, 604)
+for i in range(3):
+    yy = 264 + i * 57
+    rect(p, "loading bar main", 747, yy, 212, 12, C["gray_soft"], 5)
+    rect(p, "loading bar secondary", 747, yy + 21, 139, 9, C["paper"], 4)
+    rect(p, "loading bar state", 1111, yy + 7, 98, 10, C["gray_soft"], 5)
+    rect(p, "loading bar action", 1243, yy + 7, 103, 10, C["paper"], 5)
+text(p, "loading explanation", 747, 431, 595, "与真实列表保持相同结构；加载完成后再显示可执行操作。", 12, C["muted"])
+
+rect(p, "unsaved specimen", 64, 489, 630, 316, C["white"], 12, C["line"])
+text(p, "unsaved eyebrow", 90, 512, 550, "法务审查人  /  审查草稿 V1", 12, C["muted"], "600")
+pill(p, "unsaved state", 538, 507, 130, "修改未保存", C["amber_soft"], C["amber"])
+rule(p, "unsaved rule", 90, 550, 578)
+text(p, "unsaved field label", 90, 571, 538, "法务意见", 13, C["ink"], "600")
+rect(p, "unsaved field", 90, 601, 578, 82, C["white"], 8, C["amber"])
+text(p, "unsaved field value", 106, 615, 545,
+     "建议补充可执行验收条件，再确定付款节点。", 13, C["ink"])
+text(p, "unsaved help", 91, 690, 560, "先保存草稿，再确认该审查版本。", 12, C["amber"])
+button(p, "unsaved save", 359, 743, 132, "保存修改")
+button(p, "unsaved confirm", 503, 743, 165, "确认审查 V1", disabled=True)
+
+rect(p, "conflict specimen", 720, 489, 656, 316, C["white"], 12, C["line"])
+text(p, "conflict eyebrow", 746, 512, 560, "法务审查人  /  保存冲突", 12, C["muted"], "600")
+pill(p, "conflict badge", 1214, 507, 136, "版本已变化", C["amber_soft"], C["amber"])
+rule(p, "conflict rule", 746, 550, 604)
+text(p, "conflict title", 746, 576, 570, "当前修改尚未保存", 20, C["ink"], "700")
+text(p, "conflict explanation", 746, 614, 590,
+     "其他操作已更新审查版本。重新读取后，请比较当前内容与本次修改。", 13, C["muted"])
+rect(p, "conflict comparison", 746, 659, 604, 65, C["amber_soft"], 8)
+text(p, "conflict comparison text", 762, 674, 566,
+     "当前服务端：审查 V2     ·     本页编辑基于：审查 V1", 12, C["amber"], "600")
+button(p, "conflict reload", 1162, 743, 188, "重新读取并比较", True)
+text(p, "feedback footer", 64, 833, 1290,
+     "视觉规范：状态同时使用文字和颜色；禁用操作解释原因；冲突不自动覆盖其他法务的修改。", 12, C["muted"])
 
 document = {"version": "2.17", "children": children}
 OUT.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

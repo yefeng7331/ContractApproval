@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from backend.auth import AuthStore, User
 from backend.errors import ApiError, api_error_handler, validation_error_handler
+from backend.mock_pending import MOCK_PENDING_ID, MOCK_PENDING_ITEM, synthetic_attachment
 from backend.tasks import MAX_UPLOAD_BYTES, TaskStore
 
 
@@ -85,6 +86,8 @@ def create_app(
     database_path: str | Path | None = None,
     auth_store: AuthStore | None = None,
     upload_root: str | Path | None = None,
+    *,
+    auto_process_docx: bool = False,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -94,9 +97,18 @@ def create_app(
         task_store.initialize()
         app.state.auth_store = store
         app.state.task_store = task_store
+        worker = None
+        if auto_process_docx:
+            from backend.docx_worker import DocxWorker
+
+            task_store.jobs.recover_expired()
+            worker = DocxWorker(task_store.jobs)
+            worker.start()
         try:
             yield
         finally:
+            if worker is not None:
+                worker.stop()
             if auth_store is None:
                 store.close()
 
@@ -145,6 +157,45 @@ def create_app(
         finally:
             await file.close()
 
+    @app.get("/api/v1/mock-pending")
+    def list_mock_pending(actor: Annotated[User, Depends(require_roles("business"))]):
+        _ = actor
+        return {"items": [MOCK_PENDING_ITEM]}
+
+    @app.post("/api/v1/mock-pending/{pending_id}/import", status_code=201)
+    def import_mock_pending(
+        pending_id: str,
+        actor: Annotated[User, Depends(require_roles("business"))],
+        task_store: Annotated[TaskStore, Depends(get_task_store)],
+    ):
+        if pending_id != MOCK_PENDING_ID:
+            raise ApiError(404, "MOCK_PENDING_NOT_FOUND", "模拟待办不存在")
+        return task_store.create_task(
+            actor,
+            MOCK_PENDING_ITEM["attachment_filename"],
+            synthetic_attachment(),
+            MOCK_PENDING_ITEM["department"],
+            MOCK_PENDING_ITEM["applicant"],
+            source="mock_pending",
+            mock_approval_id=pending_id,
+        )
+
+    @app.post("/api/v1/tasks/{task_id}/documents", status_code=201)
+    async def add_document_version(
+        task_id: str,
+        actor: Annotated[User, Depends(require_roles("business"))],
+        task_store: Annotated[TaskStore, Depends(get_task_store)],
+        base_document_version: Annotated[int, Form(ge=1)],
+        file: Annotated[UploadFile, File()],
+    ):
+        try:
+            content = await file.read(MAX_UPLOAD_BYTES + 1)
+            return task_store.add_document_version(
+                task_id, actor, base_document_version, file.filename or "", content
+            )
+        finally:
+            await file.close()
+
     @app.get("/api/v1/tasks")
     def list_tasks(
         actor: Annotated[User, Depends(current_user)],
@@ -167,7 +218,26 @@ def create_app(
     ):
         return task_store.get_task(task_id, actor)
 
+    @app.get("/api/v1/tasks/{task_id}/document")
+    def get_parsed_document(
+        task_id: str,
+        actor: Annotated[User, Depends(current_user)],
+        task_store: Annotated[TaskStore, Depends(get_task_store)],
+        document_version: int | None = Query(default=None, ge=1),
+    ):
+        return task_store.get_parsed_document(task_id, actor, document_version)
+
+    @app.get("/api/v1/tasks/{task_id}/risks")
+    def get_rule_drafts(
+        task_id: str,
+        actor: Annotated[User, Depends(current_user)],
+        task_store: Annotated[TaskStore, Depends(get_task_store)],
+        document_version: int | None = Query(default=None, ge=1),
+        review_version: int | None = Query(default=None, ge=1),
+    ):
+        return task_store.get_rule_drafts(task_id, actor, document_version, review_version)
+
     return app
 
 
-app = create_app()
+app = create_app(auto_process_docx=True)
