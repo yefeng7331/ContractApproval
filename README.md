@@ -2,7 +2,23 @@
 
 ## 当前进度（2026-09-26）
 
-FE1–FE8 和 A8 的 F1 人工操作记录已由用户验收；A8 管理员查询接口待验收。法务账号可在任务详情核对原文、修改审查草稿并正式确认；业务与法务可查看已确认版本的 Markdown/PDF 报告。法务可将确认结论写为本地模拟评论。管理员可查看受阻原因、按条件重试当前文档版本，并查看模拟待办附件获取历史；换件和预算决策受阻不提供管理员重试。F1 的法务保存、确认及模拟回写发起和结果写入后端审计表，管理员可调用 `GET /api/v1/tasks/{task_id}/audit-events` 查询事件元数据；前端尚无操作记录页面。本机前后端总体验收仍未完成。此系统不连接真实审批平台，不主动调用付费模型；规则依据仍待法务核定。
+FE1–FE8、A8 的 F1 人工操作记录、管理员查询接口、操作记录页面、处理记录、本机 HTTP 联调及单命令启动已由用户验收。法务账号可在任务详情核对原文、修改审查草稿并正式确认；业务与法务可查看已确认版本的 Markdown/PDF 报告。法务可将确认结论写为本地模拟评论。管理员可查看受阻原因、按条件重试当前文档版本，并查看模拟待办附件获取历史与处理记录；换件和预算决策受阻不提供管理员重试。F2 文本 PDF、F3 清晰扫描件、F4 修订合同零误报的本机 HTTP 联调已验收；F5 空文 DOCX 受阻换件联调待验收，浏览器页面点击与总体验收仍未完成。此系统不连接真实审批平台，不主动调用付费模型；规则依据仍待法务核定。
+
+A7 F5 空文 DOCX 受阻换件本机 HTTP 联调（待验收）：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f5_empty_docx_live_proxy_block_replacement_and_permissions -v`。临时 SQLite、固定空文 DOCX 和有效替换件经 Vite 代理核对受阻原因、禁止虚假结论、所属业务换件、越权与旧版冲突拒绝，以及 v1/v2 处理记录。定向 1/1、F1–F5 本机 HTTP 回归 5/5 通过；加密 PDF、模糊扫描件的本机 HTTP 联调及浏览器点击尚未验证。
+
+A1–A4 F4 修订合同零误报本机 HTTP 联调（已由用户验收）：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f4_revised_docx_live_proxy_no_false_risks_and_permissions -v`。临时 SQLite 与固定合成 DOCX 经 Vite 代理核对解析、同版预览、零规则命中、`MODEL_NOT_REQUIRED`、法务确认、含法律风险边界提示的报告及权限拒绝；不请求模型。定向 1/1、F1–F4 本机 HTTP 回归 4/4 通过。浏览器实际显示和点击尚未验证。
+
+A1–A4 F3 清晰扫描件本机 HTTP 联调（已由用户验收）：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f3_scan_live_proxy_ocr_regions_review_and_permissions -v`。临时 SQLite 与固定合成 PNG 经 Vite 代理完成上传、真实 CPU OCR、同版原图区域预览、两条风险、受控模型响应、法务确认及报告；覆盖提前确认/预览拒绝、越权及错误版本。定向 1/1、F1–F3 本机 HTTP 回归 3/3 通过。浏览器双向高亮与真实点击尚未验证。
+
+A1–A4 F2 文本 PDF 本机 HTTP 联调（已由用户验收）：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f2_pdf_live_proxy_pages_review_and_permissions -v`，使用临时 SQLite 与固定合成 PDF，经 Vite 代理核对上传、解析、F2 本版第 2/3 页风险锚点、原 PDF 预览、法务确认、报告及权限拒绝；受控模型响应不联网。定向 1/1、包含 F1 的本机 HTTP 回归 2/2 通过。浏览器双向高亮与真实点击尚未验证。
+
+A8 Windows 本机单命令启动（已由用户验收）：安装已有 `.venv` 与 `frontend/node_modules` 后，在仓库根目录运行 `.\.venv\Scripts\python.exe scripts/start_local.py`，打开 <http://127.0.0.1:5173/>；按 `Ctrl+C` 结束两个本次启动的服务。默认使用 `storage/contract_approval.sqlite3` 和 `storage/uploads`；要隔离验收数据，可附加 `--data-root D:\path\to\isolated-data`，并可用 `--backend-port`、`--frontend-port` 改端口。启动前会拒绝占用端口。此入口为查询模式，不启动解析、报告或模型等后台作业；新提交任务不会自动处理。独立冒烟：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_launcher -v`（2/2，成功启动/释放端口、API 代理 401 及占用端口拒绝）；浏览器实际点击尚未验证。
+
+A8 本机 HTTP 联调入口：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance -v`。冒烟临时启动 Uvicorn 和 Vite，所有业务请求经 Vite `/api` 代理，使用临时 SQLite、合成 F1/F2/F3/F4/F5 空文与受控模型响应（F4/F5 无须模型响应）；覆盖登录、上传、机器处理、法务复核/确认、报告、模拟回写、管理员记录、F5 受阻换件和权限拒绝，完成后关闭服务并清理数据。需已有 `frontend/node_modules`，不调用付费模型。这是 HTTP 联调证据，浏览器交互与视觉尚未点验。
+
+A8 处理记录验收：按下方 FE1 启动命令打开前端，用管理员账号进入已完成处理的合成 F1 任务，在“任务处理记录”核对解析、规则、模型和两种报告的状态、文档版本及审查版本；切换全部/指定文档版本，有超过 20 条时核对翻页。业务与法务任务详情不应出现该区，直接请求接口应返回 403。隔离冒烟：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_processing_records -q`（1/1，通过真实 TestClient、临时 SQLite 和受控模型响应，不联网）；前端请求冒烟 `node --experimental-strip-types --test frontend/tests/processing.test.ts`（3/3），全量前端 34/34，构建通过。实际浏览器点击及本机端到端仍待核对。
+
+A8 操作记录页面验收记录（已由用户验收）：按下方 FE1 启动命令打开前端，用管理员账号进入已存在的合成任务，核对操作记录中的动作、文档版本、时间和操作人；切换“全部版本”与指定版本，若记录超过 20 条则核对翻页。用业务、法务账号核对任务详情没有该区域；直接调用接口仍由后端返回 403。交付时页面独立冒烟 3/3、前端全量 31/31、构建及后端 F1 接口冒烟 1/1 通过；实际浏览器点击和本机端到端仍待核对。
 
 A8 操作记录与管理员查询冒烟：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_backend_integration.BackendIntegrationTests.test_f1_operation_record_smoke -q`。测试使用临时数据库、合成 F1 和受控模型响应，核对成功链路、越权/冲突拒绝、重复请求、查询权限、版本过滤和分页。
 

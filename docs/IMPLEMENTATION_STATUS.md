@@ -1,8 +1,68 @@
 # 实施与验收状态
 
-## 2026-09-26 A8 增量：管理员操作记录查询（PENDING_ACCEPTANCE）
+## 2026-09-26 A7 F5 空文 DOCX 受阻换件本机 HTTP 联调（PENDING_ACCEPTANCE）
 
-上一项 F1 人工操作记录已获用户明确验收。本轮业务要求 → 实现：新增仅管理员可读的 `GET /api/v1/tasks/{task_id}/audit-events`，按事件 ID 顺序返回任务 ID、总数及操作事件的 ID、动作、文档版本、时间、操作者用户名/角色；可按 `document_version` 过滤，以 `limit`（1–100）和 `offset` 分页。无 Bearer 为 401，业务和法务为 403，不存在任务为 404，无效查询为 422。响应不包含合同正文、原附件路径、密钥、会话 token 或评论正文；只读取现有审计表，不改变业务状态。
+用户已明确验收 F4 修订合同零误报本机 HTTP 联调。本轮业务要求 → 实现与验证：`tests/test_local_http_acceptance.py::test_f5_empty_docx_live_proxy_block_replacement_and_permissions` 使用临时 SQLite、合成账号及固定 F5 空文 DOCX，经真实 Uvicorn 和 Vite `/api` 代理上传。解析后任务为 `blocked/DOCX_EMPTY`，有受阻原因，恢复动作为 `replace_attachment`，无风险等级；正文、规则快照及提前确认均被拒绝。管理员处理记录保留 v1 解析受阻代码；管理员重试被拒绝，只有任务所属业务账号可上传有效 F4 DOCX 形成 v2，过期版本及越权换件被拒绝。v2 解析成功后可读取新正文，旧版受阻记录仍在，旧版正文不可读取。未调用外部模型或真实审批平台。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f5_empty_docx_live_proxy_block_replacement_and_permissions -v` 1/1 PASS；`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance -q` 5/5 PASS（F1–F5 空文）。此证据仅覆盖 F5 空文 DOCX 的本机 HTTP 与持久化链路；加密 PDF、严重模糊扫描件的本机 HTTP 联调和浏览器点击仍 `UNVERIFIED`，A8 总体验收仍 `PARTIAL`。
+
+## 2026-09-26 A1–A4 F4 修订合同零误报本机 HTTP 联调（ACCEPTED）
+
+用户本轮回复“验收成功”，F4 据此记为已验收。以下保留交付时的技术证据与边界。
+
+用户已明确验收 F3 清晰扫描件本机 HTTP 联调。本轮业务要求 → 实现与验证：`tests/test_local_http_acceptance.py::test_f4_revised_docx_live_proxy_no_false_risks_and_permissions` 使用临时 SQLite、合成账号与固定 F4 DOCX，经真实 Uvicorn 和 Vite `/api` 代理完成上传、DOCX 解析、同版字段/条款核对、DOCX PDF 预览与区域映射。两条已启用规则均未命中，持久模型作业返回 `MODEL_NOT_REQUIRED`，无需模型请求；法务仍可复核确认，所属业务账号取得同版 Markdown/PDF 报告，报告明确提示“无保留风险；不代表合同不存在其他法律风险”。前端工作台已有“未发现已启用规则风险，不代表法律安全”文案；本轮未做浏览器点击核验。冒烟覆盖草稿未就绪 409、过早确认 409、越权 401/403/404。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f4_revised_docx_live_proxy_no_false_risks_and_permissions -v` 1/1 PASS；整个 `tests.test_local_http_acceptance` 4/4 PASS（F1–F4）。此证据限本机 HTTP 与持久化链路，浏览器实际显示与点击、F5/F6 页面链路仍 `UNVERIFIED`；A8 总体验收仍 `PARTIAL`。
+
+## 2026-09-26 A1–A4 F3 清晰扫描件本机 HTTP 联调（ACCEPTED）
+
+用户本轮回复“验收通过，继续下一项”，F3 据此记为已验收。以下保留交付时的技术证据与边界。
+
+用户已明确验收 F2 文本 PDF 本机 HTTP 联调。本轮业务要求 → 实现与验证：`tests/test_local_http_acceptance.py::test_f3_scan_live_proxy_ocr_regions_review_and_permissions` 使用临时 SQLite、合成账号及固定 F3 PNG，经真实 Uvicorn 和 Vite `/api` 代理上传、执行真实 CPU OCR、建立同版原图区域预览、生成两条高风险规则快照和受控模型响应，再由法务复核确认，所属业务账号读取同版 Markdown/PDF 报告。核对 12 段正文、页码 1、OCR 行区域映射与风险原文锚点；预览为原图生成的 PDF。确认前拒绝预览或确认，越权 401/403/404，错误文档版本 404。测试未调用真实审批平台或付费模型。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f3_scan_live_proxy_ocr_regions_review_and_permissions -v` 1/1 PASS；整个 `tests.test_local_http_acceptance` 3/3 PASS（F1–F3）。此证据限本机 HTTP、持久化及真实 OCR；浏览器真实点击、原文与卡片双向高亮、F4–F6 页面全链路及真实 DeepSeek 调用仍 `UNVERIFIED`；A8 总体验收仍 `PARTIAL`。
+
+## 2026-09-26 A1–A4 F2 文本 PDF 本机 HTTP 联调（ACCEPTED）
+
+用户本轮回复“验收通过，请进行下一项”，F2 据此记为已验收。以下保留交付时的技术证据与边界。
+
+用户已明确验收上一项本机单命令启动。本轮业务要求 → 实现与验证：`tests/test_local_http_acceptance.py::test_f2_pdf_live_proxy_pages_review_and_permissions` 用临时 SQLite、合成账号与固定 F2 文本 PDF，经真实 Uvicorn 和 Vite `/api` 代理完成上传、持久解析、同版规则与受控模型响应、原 PDF 预览、法务复核确认及同版 Markdown/PDF 报告。按固定 F1 同语义标注核对两条高风险、锚点原文与 F2 本版第 2/3 页；确认前拒绝读取、越权 401/403/404、过早确认 409，确认后所属业务账号可读取确认结果，其他业务账号仍不可读取。请求未触达真实审批平台或付费模型。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f2_pdf_live_proxy_pages_review_and_permissions -v` 1/1 PASS；复跑整个 `tests.test_local_http_acceptance` 2/2 PASS，保留 F1 回归。此证据为本机 HTTP 与持久化链路，浏览器真实点击、原文与卡片双向高亮、F3–F6 页面全链路及真实 DeepSeek 调用仍 `UNVERIFIED`；A8 总体验收仍 `PARTIAL`。
+
+## 2026-09-26 A8 本机单命令启动（ACCEPTED）
+
+用户本轮回复“验收成功，继续下一项”，本项据此记为已验收。以下保留交付时的技术证据与边界。
+
+用户已明确验收上一项本机 HTTP 联调。本轮业务要求 → 实现：按 D-04 的 Windows 单机使用方式，新增 `scripts/start_local.py` 同时启动 Uvicorn 与 Vite，`backend/local_runtime.py` 提供仅查询用的应用工厂；可选端口和隔离数据目录，启动前检查依赖和端口，启动后检查前后端及 Vite API 代理的 HTTP 就绪，退出时停止本次启动的两个进程。默认使用项目现有 SQLite 路径；传入 `--data-root` 时只使用指定目录中的 SQLite 与上传目录。入口关闭所有后台作业，因此不会自动解析新上传任务或调用付费模型。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_launcher -v` 2/2 PASS，覆盖临时 SQLite 下前后端启动、HTTP 就绪、代理未登录 401、退出释放端口，以及后端端口被占用时拒绝启动且不创建数据。`--smoke` 可独立运行。原 PowerShell 入口在此环境启动时文件消失，无法稳定保留，故改为现有 Python 解释器入口。浏览器真实点击与视觉仍 `UNVERIFIED`：本机未安装 Playwright，已发现的 Edge 在当前执行环境下无界面启动超时，无法把 HTTP 检查记作浏览器验收。F1 真实 DeepSeek 调用、F2–F6 页面全链路和 A8 总体验收仍未完成；A8 保持 `PARTIAL`。
+
+## 2026-09-26 A8 本机前后端 HTTP 联调（ACCEPTED）
+
+用户本轮回复“验收通过，继续下一项”，本项据此记为已验收。以下保留交付时的技术证据与边界。
+
+上一项管理员任务处理记录已获用户明确验收。本轮业务要求 → 实现：`tests/test_local_http_acceptance.py` 在临时 SQLite、合成账号与 F1 DOCX 上启动真实 Uvicorn 和 Vite，所有业务 HTTP 请求均经过 Vite `/api` 代理；核对前端 HTML/脚本资源、登录与角色、上传、解析/规则/受控模型响应、原文与预览、法务草稿和确认、同版 Markdown/PDF、模拟回写、管理员操作与处理记录，以及 401/403/404 和确认前 409。`frontend/vite.config.ts` 增加仅供本机隔离联调覆盖的 `CONTRACT_API_PROXY_TARGET`，默认仍为 `http://127.0.0.1:8010`。测试关闭服务并清理临时数据，不使用真实审批平台或付费模型。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance -v` 1/1 PASS（真实本机 HTTP、Vite 代理、受控模型响应）；`npm.cmd --prefix frontend run build` PASS（TypeScript + Vite，51 modules）；`git diff --check` PASS。这证明 HTTP 接入及合成 F1 主链，不证明浏览器点击、双栏高亮/视觉、目标 Windows 电脑、F2–F6 页面全链路或 F1 真实 DeepSeek 调用；A8 总体验收仍为 `PARTIAL`。
+
+## 2026-09-26 A8 增量：管理员任务处理记录（ACCEPTED）
+
+用户随后明确回复“验收通过，继续下一项”，本项记为已验收。
+
+上一项管理员任务操作记录页面已获用户明确验收。本轮业务要求 → 实现：`backend/tasks.py:list_processing_records` 和 `GET /api/v1/tasks/{task_id}/processing-records` 只向管理员按版本、分页提供 F1 解析尝试、规则尝试、模型作业及 Markdown/PDF 报告结果；保留阶段、文档/审查版本、尝试次数、状态、故障代码与已有时间。`frontend/src/ProcessingRecords.tsx` 在管理员任务详情呈现这些元数据，支持版本筛选、翻页、刷新、401 会话失效及错误重读。业务与法务无页面入口且 API 返回 403；不返回合同原文、模型请求/响应、报告内容、密钥或附件路径。人工操作事件仍在相邻操作记录区，机器处理不冒充人工事件。报告表没有完整的开始时间，页面明确显示“未记录”。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_processing_records -q` 1/1 PASS（真实 FastAPI/TestClient、隔离 SQLite、合成 F1 与受控模型响应；核对完整处理阶段、同版/分页、字段白名单、401/403/404/422，断网）；`npm.cmd --prefix frontend test` 34/34 PASS（本项独立请求冒烟 3/3，模拟 Bearer、错任务/版本和 401/403）；`npm.cmd --prefix frontend run build` PASS（TypeScript + Vite，51 modules）。浏览器点击与本机前后端总体验收仍 `UNVERIFIED`；A8 阶段验收仍 `PARTIAL`，无付费调用或正式数据改动。
+
+## 2026-09-26 A8 前端增量：管理员任务操作记录（ACCEPTED）
+
+上一项管理员操作记录查询接口已获用户明确验收；用户随后明确回复“验收成功，进行下一项”，本页面记为已验收。本轮业务要求 → 实现：`frontend/src/AuditEvents.tsx` 仅在管理员任务详情挂载，`frontend/src/audit.ts` 用 Bearer 读取已验收的 `GET /api/v1/tasks/{task_id}/audit-events`；可查看全部或指定文档版本，按服务端 20 条分页，显示时间、动作、版本及操作者。切换任务、版本、页面或刷新时重新读取，核对响应任务 ID 和筛选版本；401 退出会话，403 等错误原样提示并允许手动重读。业务与法务无入口，后端继续按角色拒绝越权。页面不显示合同正文、评论正文或密钥；作业尝试细节仍由原状态记录负责。
+
+技术验证：`node --experimental-strip-types --test frontend/tests/audit.test.ts` 3/3 PASS（模拟 Bearer、准确任务/版本/分页请求、错任务/版本拒绝、403/401）；`npm.cmd --prefix frontend test` 31/31 PASS；`npm.cmd --prefix frontend run build` PASS（TypeScript + Vite，49 modules）；`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_backend_integration.BackendIntegrationTests.test_f1_operation_record_smoke -q` 1/1 PASS（真实 FastAPI/TestClient、临时 SQLite、合成 F1）。浏览器点击及本机前后端总体验收仍 `UNVERIFIED`；A8 全链路阶段验收仍 `PARTIAL`，无付费调用或正式数据改动。
+
+## 2026-09-26 A8 增量：管理员操作记录查询（ACCEPTED）
+
+上一项 F1 人工操作记录已获用户明确验收；用户随后明确回复“验收通过，进行下一项”，本项记为已验收。本轮业务要求 → 实现：新增仅管理员可读的 `GET /api/v1/tasks/{task_id}/audit-events`，按事件 ID 顺序返回任务 ID、总数及操作事件的 ID、动作、文档版本、时间、操作者用户名/角色；可按 `document_version` 过滤，以 `limit`（1–100）和 `offset` 分页。无 Bearer 为 401，业务和法务为 403，不存在任务为 404，无效查询为 422。响应不包含合同正文、原附件路径、密钥、会话 token 或评论正文；只读取现有审计表，不改变业务状态。
 
 技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_backend_integration.BackendIntegrationTests.test_f1_operation_record_smoke -q` 1/1 PASS（真实 FastAPI/TestClient、临时 SQLite、合成 F1 与受控模型响应；含成功、版本过滤、分页、无凭据、角色拒绝、不存在任务和参数无效）；`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_tasks tests.test_backend_integration -q` 17/17 PASS；`npm.cmd --prefix frontend test` 28/28 PASS。浏览器操作与本机前后端总体验收仍 `UNVERIFIED`。A8 全部操作记录和阶段验收仍 `PARTIAL`；无付费调用、无正式数据改动。
 

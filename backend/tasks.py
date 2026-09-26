@@ -383,6 +383,56 @@ class TaskStore:
             ).fetchall()
         return {"task_id": task_id, "total": total, "items": [dict(row) for row in rows]}
 
+    def list_processing_records(
+        self, task_id: str, actor: User, document_version: int | None = None,
+        limit: int = 100, offset: int = 0,
+    ) -> dict:
+        """Read versioned worker outcomes without exposing contract or model content."""
+        if actor.role != "admin":
+            raise ApiError(403, "FORBIDDEN", "仅管理员可查看处理记录")
+        with self.auth_store.lock:
+            db = self.auth_store.connection
+            if db.execute("SELECT 1 FROM tasks WHERE id=?", (task_id,)).fetchone() is None:
+                raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
+            where = "task_id=?" + (" AND document_version=?" if document_version is not None else "")
+            params = (task_id,) if document_version is None else (task_id, document_version)
+            records = []
+            for row in db.execute(
+                f"SELECT document_version,attempt,outcome,error_code,claimed_at,finished_at "
+                f"FROM processing_attempts WHERE {where}", params
+            ):
+                records.append(dict(stage="parse", document_version=row["document_version"],
+                    review_version=None, attempt=row["attempt"], status=row["outcome"],
+                    code=row["error_code"], started_at=row["claimed_at"], finished_at=row["finished_at"]))
+            for row in db.execute(
+                f"SELECT document_version,attempt,outcome,code,created_at,finished_at "
+                f"FROM rule_processing_attempts WHERE {where}", params
+            ):
+                records.append(dict(stage="rules", document_version=row["document_version"],
+                    review_version=None, attempt=row["attempt"], status=row["outcome"],
+                    code=row["code"], started_at=row["created_at"], finished_at=row["finished_at"]))
+            for row in db.execute(
+                f"SELECT document_version,state,code,created_at,finished_at "
+                f"FROM model_jobs WHERE {where}", params
+            ):
+                records.append(dict(stage="model", document_version=row["document_version"],
+                    review_version=None, attempt=None, status=row["state"], code=row["code"],
+                    started_at=row["created_at"], finished_at=row["finished_at"]))
+            report_where = "r.task_id=?" + (" AND v.document_version=?" if document_version is not None else "")
+            for row in db.execute(
+                "SELECT v.document_version,r.review_version,r.format,r.state,r.attempts,r.error,r.generated_at "
+                "FROM reports AS r JOIN review_versions AS v "
+                "ON v.task_id=r.task_id AND v.review_version=r.review_version "
+                f"WHERE {report_where}", params
+            ):
+                records.append(dict(stage="report_" + row["format"], document_version=row["document_version"],
+                    review_version=row["review_version"], attempt=row["attempts"], status=row["state"],
+                    code=row["error"], started_at=None, finished_at=row["generated_at"]))
+        order = {"parse": 0, "rules": 1, "model": 2, "report_markdown": 3, "report_pdf": 4}
+        records.sort(key=lambda item: (item["document_version"], order[item["stage"]],
+                                       item["review_version"] or 0, item["attempt"] or 0))
+        return {"task_id": task_id, "total": len(records), "items": records[offset:offset + limit]}
+
     def get_parsed_document(
         self, task_id: str, actor: User, document_version: int | None = None
     ) -> dict:

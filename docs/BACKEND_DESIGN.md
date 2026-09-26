@@ -137,9 +137,11 @@ PDF 规则快照增量：已有 `rule_draft_snapshots` 允许保存结构化完�
 | `MockComment`/`WritebackAttempt` | 任务、确认版本、目标模拟单、评论文本/ID、状态、尝试与错误 | `(task_id, confirmed_review_version, mock_approval_id)` 唯一；重试不产生第二条同版评论 |
 | `Job`/`AuditEvent`/`CostLedger` | 任务阶段、租约/次数、操作者、时间、调用估算/实际用量 | 状态与日志落库；失败和重启保留可复核记录 |
 
-2026-09-26 A8 增量：`audit_events` 对 F1 人工写操作统一保存 `task_id`、`actor_user_id`、`action`、`document_version`、`created_at`。`review_saved`、`review_confirmed`、`mock_writeback_requested`、`mock_writeback_succeeded`/`mock_writeback_failed` 与对应业务写入共用事务；幂等重读不产生第二事件。解析、模型、报告和回写尝试仍分别由持久作业表保存详细状态；此增量尚未提供审计查询 API，也不等同 A8 全部验收。
+2026-09-26 A8 增量：`audit_events` 对 F1 人工写操作统一保存 `task_id`、`actor_user_id`、`action`、`document_version`、`created_at`。`review_saved`、`review_confirmed`、`mock_writeback_requested`、`mock_writeback_succeeded`/`mock_writeback_failed` 与对应业务写入共用事务；幂等重读不产生第二事件。解析、模型、报告和回写尝试仍分别由持久作业表保存详细状态；审计查询 API 见下一增量，也不等同 A8 全部验收。
 
 2026-09-26 A8 查询增量：`GET /api/v1/tasks/{task_id}/audit-events` 仅管理员可用，支持可选 `document_version>=1`、`limit=1..100`（默认 100）、`offset>=0`；按审计 ID 升序返回 `task_id`、`total`、`items`。每项仅含 `id`、`action`、`document_version`、`created_at`、`actor_username`、`actor_role`。不暴露正文、附件路径、密钥或评论内容；无权限 401/403，缺失任务 404，参数错误 422。该只读接口供 A8 核对，不把机器作业的细节误标为人工审计事件。
+
+2026-09-26 A8 处理记录增量：`GET /api/v1/tasks/{task_id}/processing-records` 仅管理员可读，可选 `document_version>=1`、`limit=1..100`（默认 100）及 `offset>=0`。从已持久化的解析尝试、规则尝试、模型作业和两种报告状态读取；按文档版本、处理阶段、审查版本与尝试序号排序，返回 `task_id`、`total`、`items`。每项只含 `stage`、`document_version`、`review_version`、`attempt`、`status`、`code`、`started_at`、`finished_at`；原表未记录的时间为 `null`。不读取或返回合同正文、模型输入/输出、报告文件、密钥、附件路径。权限和参数拒绝同操作记录 API；此记录是作业结果摘要，不代表浏览器全链路或供应商账单验收。
 
 SQLite 操作使用事务保护状态转移、审查确认、任务领取及模拟评论唯一约束；文件落盘采用先写临时产物、校验后登记的顺序。清理仅由显式重置触发，不在重启时自动删除任务或证据。
 

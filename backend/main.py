@@ -248,6 +248,17 @@ def create_app(
     ):
         return task_store.list_audit_events(task_id, actor, document_version, limit, offset)
 
+    @app.get("/api/v1/tasks/{task_id}/processing-records")
+    def list_processing_records(
+        task_id: str,
+        actor: Annotated[User, Depends(require_roles("admin"))],
+        task_store: Annotated[TaskStore, Depends(get_task_store)],
+        document_version: int | None = Query(default=None, ge=1),
+        limit: int = Query(default=100, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ):
+        return task_store.list_processing_records(task_id, actor, document_version, limit, offset)
+
     @app.get("/api/v1/tasks/{task_id}/document")
     def get_parsed_document(
         task_id: str,
