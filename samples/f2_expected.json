@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "sample_id": "F2-text-pdf",
+  "file": "f2-text-software-purchase.pdf",
+  "sha256": "1e57bd776b26e4b8529edecabb90fdf56c523d3bd77c530698df692b8842e98c",
+  "document_version": 1,
+  "page_count": 3,
+  "source_text_oracle": "f1_f4_expected.json#samples/F1",
+  "offset_unit": "zero-based Unicode code point, end exclusive, in NFC normalized_text",
+  "pages": [
+    {"page": 1, "paragraph_indexes": [0, 1, 2, 3, 4, 5]},
+    {"page": 2, "paragraph_indexes": [6, 7]},
+    {"page": 3, "paragraph_indexes": [8, 9, 10, 11]}
+  ],
+  "field_pages": {
+    "title": 1,
+    "contract_number": 1,
+    "department": 1,
+    "applicant": 1,
+    "buyer": 1,
+    "buyer_credit_code": null,
+    "supplier": 1,
+    "supplier_credit_code": null,
+    "amount": 1,
+    "currency": 1,
+    "performance_term": 1,
+    "effective_conditions": null
+  },
+  "clause_pages": {
+    "标的": 1,
+    "付款": 2,
+    "验收": 2,
+    "知识产权": 3,
+    "违约": 3,
+    "保密": 3,
+    "争议解决": 3,
+    "数据安全": null
+  },
+  "risks": [
+    {"rule_id": "DEMO-IP-01", "rule_version": "demo-v2", "risk_level": "high", "anchor_clause_types": ["知识产权"], "anchor_pages": [3], "suggestion": "请法务协商权属、满足项目目的的许可、源代码交付及第三方权利保证；不预设采购方取得全部著作权。"},
+    {"rule_id": "DEMO-PAY-01", "rule_version": "demo-v2", "risk_level": "high", "anchor_clause_types": ["付款", "验收"], "anchor_pages": [2, 2], "suggestion": "请法务协商按可核验的交付与验收里程碑付款；具体比例由法务确定。"}
+  ],
+  "enabled_rule_risk_summary": "high",
+  "machine_suggestion": "建议拒绝并整改",
+  "pdf_parser_status": "COMPONENT_PENDING_ACCEPTANCE",
+  "precise_regions_status": "UNVERIFIED"
+}

@@ -1,0 +1,2 @@
+# Fixture generation and validation only; not a backend runtime dependency.
+pypdf==6.19.0

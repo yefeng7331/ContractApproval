@@ -3,6 +3,7 @@
 .env.*
 *.env
 *.env.*
+*.secrets.*
 *.pem
 *.key
 *.p12
@@ -28,6 +29,8 @@ generated_reports/
 
 # Python and JavaScript build files
 .venv/
+.tools/pdf-fixtures/
+.tools/ocr/
 venv/
 __pycache__/
 *.py[cod]
@@ -35,6 +38,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 node_modules/
+frontend/public/pdfjs/
 dist/
 build/
 coverage/

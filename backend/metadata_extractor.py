@@ -53,7 +53,8 @@ _AMOUNT = re.compile(
 )
 _CREDIT_CODE = re.compile(r"[0-9A-Z]{18}")
 _INLINE_CREDIT_CODE = re.compile(r"[，,（(]\s*统一社会信用代码\s*[：:]")
-_TITLE = re.compile(r"[^；;：:\n]{2,80}合同(?:（[^）]{1,40}）|\([^)]{1,40}\))?")
+# OCR may insert a space before the heading suffix; preserve the original span.
+_TITLE = re.compile(r"[^；;：:\n]{2,80}合同(?:[^\S\r\n]*(?:（[^）]{1,40}）|\([^)]{1,40}\)))?")
 _EMPTY_VALUES = {"未约定", "待定", "未识别", "无", "暂无", "不适用"}
 
 
@@ -64,10 +65,10 @@ class FieldAnchor:
     start: int
     end: int
     paragraph_index: int
-    page: None = None
+    page: int | None = None
     locatable: bool = False
-    reason: str = "PREVIEW_NOT_AVAILABLE"
-    rects: tuple[()] = ()
+    reason: str | None = "PREVIEW_NOT_AVAILABLE"
+    rects: tuple[dict[str, int | float], ...] = ()
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "scenario_id": "F6-writeback-failure-and-duplicate",
+  "synthetic": true,
+  "task_id": "synthetic-f6-task",
+  "mock_approval_id": "synthetic-f6-approval",
+  "comment_markdown": "模拟回写：合成软件采购合同需法务确认整改。",
+  "dependency_attempts": [
+    {"attempt_number": 1, "confirmed_review_version": 1, "outcome": "failed", "comment_id": null, "created": false, "comment_count": 0},
+    {"attempt_number": 2, "confirmed_review_version": 1, "outcome": "success", "comment_id": "synthetic-comment-001", "created": true, "comment_count": 1},
+    {"attempt_number": 3, "confirmed_review_version": 1, "outcome": "success", "comment_id": "synthetic-comment-001", "created": false, "comment_count": 1},
+    {"attempt_number": 4, "confirmed_review_version": 2, "outcome": "success", "comment_id": "synthetic-comment-002", "created": true, "comment_count": 2}
+  ],
+  "future_application_expectations": {
+    "before_legal_confirmation": "REJECT",
+    "after_first_failure": "failed",
+    "after_retry": "success",
+    "same_key_comment_limit": 1,
+    "history_preserved_across_restart": true
+  },
+  "application_api_and_persistence_status": "NOT_IMPLEMENTED"
+}

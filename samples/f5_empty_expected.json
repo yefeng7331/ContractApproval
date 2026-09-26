@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "sample_id": "F5-empty-docx",
+  "file": "f5-empty.docx",
+  "sha256": "88665f127948c3b249ce7fbce814bf71f8bb5bcda1ba6256dcc161dcc149f643",
+  "document_version": 1,
+  "expected_parse_code": "DOCX_EMPTY",
+  "machine_status": "blocked",
+  "legal_status": "pending",
+  "writeback_status": "not_written",
+  "recovery_action": "replace_attachment",
+  "parsed_document_count": 0,
+  "risk_draft_count": 0
+}

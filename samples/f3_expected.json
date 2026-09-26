@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "sample_id": "F3-clear-scan",
+  "file": "f3-clear-scan.png",
+  "sha256": "c7cf33fff294b6842b679d99d99fdd3a411e6e551a52b8c547dcd2f06cc12548",
+  "document_version": 1,
+  "page_count": 1,
+  "image_size": [2048, 2800],
+  "image_mode": "8-bit grayscale raster, no text layer",
+  "source_text_oracle": "f1_f4_expected.json#samples/F1",
+  "offset_unit": "zero-based Unicode code point, end exclusive, in NFC normalized_text",
+  "paragraph_boxes": [
+    [0, 136, 245, 1026, 299],
+    [1, 136, 436, 634, 489],
+    [2, 136, 626, 806, 682],
+    [3, 136, 816, 1422, 872],
+    [4, 136, 1005, 1597, 1062],
+    [5, 136, 1196, 1026, 1249],
+    [6, 136, 1385, 1158, 1439],
+    [7, 136, 1576, 1422, 1629],
+    [8, 136, 1765, 1862, 1819],
+    [9, 136, 1956, 806, 2009],
+    [10, 136, 2146, 1026, 2199],
+    [11, 136, 2335, 1246, 2389]
+  ],
+  "field_pages": {
+    "title": 1,
+    "contract_number": 1,
+    "department": 1,
+    "applicant": 1,
+    "buyer": 1,
+    "buyer_credit_code": null,
+    "supplier": 1,
+    "supplier_credit_code": null,
+    "amount": 1,
+    "currency": 1,
+    "performance_term": 1,
+    "effective_conditions": null
+  },
+  "clause_pages": {
+    "标的": 1,
+    "付款": 1,
+    "验收": 1,
+    "知识产权": 1,
+    "违约": 1,
+    "保密": 1,
+    "争议解决": 1,
+    "数据安全": null
+  },
+  "risks": [
+    {
+      "rule_id": "DEMO-IP-01",
+      "rule_version": "demo-v2",
+      "risk_level": "high",
+      "anchor_clause_types": ["知识产权"],
+      "anchor_paragraph_indexes": [8],
+      "anchor_pages": [1],
+      "suggestion": "请法务协商权属、满足项目目的的许可、源代码交付及第三方权利保证；不预设采购方取得全部著作权。"
+    },
+    {
+      "rule_id": "DEMO-PAY-01",
+      "rule_version": "demo-v2",
+      "risk_level": "high",
+      "anchor_clause_types": ["付款", "验收"],
+      "anchor_paragraph_indexes": [6, 7],
+      "anchor_pages": [1, 1],
+      "suggestion": "请法务协商按可核验的交付与验收里程碑付款；具体比例由法务确定。"
+    }
+  ],
+  "enabled_rule_risk_summary": "high",
+  "machine_suggestion": "建议拒绝并整改",
+  "ocr_status": "NOT_IMPLEMENTED",
+  "preview_regions_status": "UNVERIFIED"
+}

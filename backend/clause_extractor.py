@@ -36,10 +36,10 @@ class ClauseSpan:
     start: int
     end: int
     paragraph_index: int
-    page: None = None
+    page: int | None = None
     locatable: bool = False
-    reason: str = "PREVIEW_NOT_AVAILABLE"
-    rects: tuple[()] = ()
+    reason: str | None = "PREVIEW_NOT_AVAILABLE"
+    rects: tuple[dict[str, int | float], ...] = ()
 
 
 @dataclass(frozen=True)

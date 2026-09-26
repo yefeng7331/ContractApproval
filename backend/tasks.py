@@ -18,6 +18,13 @@ from backend.demo_rules import evaluate_persisted_rule_evidence
 from backend.errors import ApiError
 from backend.jobs import JobStore
 from backend.rule_snapshot import RuleSnapshotStore
+from backend.model_budget import ModelBudgetStore
+from backend.model_jobs import ModelJobStore
+from backend.preview_store import PreviewStore
+from backend.reviews import ReviewStore
+from backend.reports import ReportStore
+from backend.writeback import WritebackStore
+from backend.pending_imports import PendingImportStore
 
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -105,8 +112,15 @@ class TaskStore:
     def __init__(self, auth_store: AuthStore, upload_root: str | Path) -> None:
         self.auth_store = auth_store
         self.upload_root = Path(upload_root)
-        self.jobs = JobStore(auth_store)
+        self.jobs = JobStore(auth_store, upload_root=self.upload_root)
         self.rule_snapshots = RuleSnapshotStore(auth_store)
+        self.model_budget = ModelBudgetStore(auth_store)
+        self.model_jobs = ModelJobStore(self)
+        self.previews = PreviewStore(self)
+        self.reviews = ReviewStore(self)
+        self.reports = ReportStore(self)
+        self.writebacks = WritebackStore(self)
+        self.pending_imports = PendingImportStore(self)
 
     def initialize(self) -> None:
         with self.auth_store.lock, self.auth_store.connection:
@@ -177,6 +191,13 @@ class TaskStore:
                 )
         self.jobs.initialize()
         self.rule_snapshots.initialize()
+        self.model_budget.initialize()
+        self.model_jobs.initialize()
+        self.previews.initialize()
+        self.reviews.initialize()
+        self.reports.initialize()
+        self.writebacks.initialize()
+        self.pending_imports.initialize()
 
     def create_task(
         self,
@@ -323,7 +344,7 @@ class TaskStore:
                 """SELECT t.*, u.username AS owner_username,
                     d.original_filename, d.format, d.sha256
                 FROM tasks AS t JOIN users AS u ON u.id = t.owner_user_id
-                JOIN document_versions AS d ON d.task_id = t.id
+                LEFT JOIN document_versions AS d ON d.task_id = t.id
                     AND d.version = t.current_document_version
                 WHERE t.id = ?""",
                 (task_id,),
@@ -331,6 +352,36 @@ class TaskStore:
         if row is None or (actor.role == "business" and row["owner_user_id"] != actor.id):
             raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
         return self._visible_summary(row, actor)
+
+    def list_audit_events(
+        self, task_id: str, actor: User, document_version: int | None = None,
+        limit: int = 100, offset: int = 0,
+    ) -> dict:
+        """Expose only audit metadata to an administrator, including historic versions."""
+        if actor.role != "admin":
+            raise ApiError(403, "FORBIDDEN", "仅管理员可查看操作记录")
+        with self.auth_store.lock:
+            exists = self.auth_store.connection.execute(
+                "SELECT 1 FROM tasks WHERE id = ?", (task_id,)
+            ).fetchone()
+            if exists is None:
+                raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
+            clause = "WHERE e.task_id = ?"
+            params: list[str | int] = [task_id]
+            if document_version is not None:
+                clause += " AND e.document_version = ?"
+                params.append(document_version)
+            total = self.auth_store.connection.execute(
+                f"SELECT COUNT(*) FROM audit_events AS e {clause}", params
+            ).fetchone()[0]
+            rows = self.auth_store.connection.execute(
+                f"""SELECT e.id, e.action, e.document_version, e.created_at,
+                           u.username AS actor_username, u.role AS actor_role
+                    FROM audit_events AS e JOIN users AS u ON u.id = e.actor_user_id
+                    {clause} ORDER BY e.id LIMIT ? OFFSET ?""",
+                [*params, limit, offset],
+            ).fetchall()
+        return {"task_id": task_id, "total": total, "items": [dict(row) for row in rows]}
 
     def get_parsed_document(
         self, task_id: str, actor: User, document_version: int | None = None
@@ -344,12 +395,19 @@ class TaskStore:
             if task is None or (actor.role == "business" and task["owner_user_id"] != actor.id):
                 raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
             if actor.role == "business":
-                raise ApiError(403, "DOCUMENT_NOT_CONFIRMED", "法务确认前不可查看解析结果")
+                document = self.reviews.confirmed_document(task_id, actor, document_version)
+                is_pdf = self.auth_store.connection.execute(
+                    "SELECT format FROM document_versions WHERE task_id=? AND version=?",
+                    (task_id, document['document_version'])).fetchone()['format'] == 'pdf'
+                document['preview_available'] = is_pdf or self.auth_store.connection.execute(
+                        "SELECT 1 FROM docx_previews WHERE task_id=? AND document_version=? AND state='ready'",
+                        (task_id, document['document_version'])).fetchone() is not None
+                return document
             if actor.role != "legal":
                 raise ApiError(403, "FORBIDDEN", "无权查看合同解析结果")
             version = task["current_document_version"] if document_version is None else document_version
             exists = self.auth_store.connection.execute(
-                "SELECT 1 FROM document_versions WHERE task_id = ? AND version = ?",
+                "SELECT format FROM document_versions WHERE task_id = ? AND version = ?",
                 (task_id, version),
             ).fetchone()
             if exists is None:
@@ -372,20 +430,90 @@ class TaskStore:
                 "document_version": version,
                 "review_version": None,
                 "normalized_text": parsed["normalized_text"],
+                "extraction_method": 'ocr' if exists['format'] in ('png', 'jpeg', 'tiff') else parsed['extraction_method'],
+                "extraction_warning": 'OCR 可能漏字或误识别，请对照原图核对；置信度不能证明全文完整'
+                    if exists['format'] in ('png', 'jpeg', 'tiff') or parsed['extraction_method'] == 'ocr' else None,
                 "paragraphs": paragraphs,
                 "fields": fields,
                 "clauses": clauses,
                 "missing_clause_types": missing,
-                "page_count": None,
-                "preview_available": False,
+                "page_count": parsed["page_count"],
+                "preview_available": (exists['format'] == 'pdf' and parsed["page_count"] is not None) or self.auth_store.connection.execute(
+                    "SELECT 1 FROM docx_previews WHERE task_id=? AND document_version=? AND state='ready'",
+                    (task_id, version)).fetchone() is not None,
+                "structured_extraction_status": parsed["structured_extraction_status"],
                 "created_at": parsed["created_at"],
             }
+
+    def get_pdf_preview(
+        self, task_id: str, actor: User, document_version: int | None = None
+    ) -> bytes:
+        """Return the original PDF for a legal reviewer's requested document version."""
+        with self.auth_store.lock:
+            task = self.auth_store.connection.execute(
+                "SELECT owner_user_id, current_document_version FROM tasks WHERE id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None or (actor.role == "business" and task["owner_user_id"] != actor.id):
+                raise ApiError(404, "TASK_NOT_FOUND", "任务不存在")
+            if actor.role == "business":
+                document_version = self.reviews.read(task_id, actor, document_version)['document_version']
+            elif actor.role != "legal":
+                raise ApiError(403, "FORBIDDEN", "无权查看合同预览")
+            version = task["current_document_version"] if document_version is None else document_version
+            document = self.auth_store.connection.execute(
+                "SELECT format, sha256, file_path FROM document_versions "
+                "WHERE task_id = ? AND version = ?", (task_id, version),
+            ).fetchone()
+            if document is None:
+                raise ApiError(404, "DOCUMENT_VERSION_NOT_FOUND", "文档版本不存在")
+            if document["format"] in ("docx", "png", "jpeg", "tiff"):
+                return self.previews.read(task_id, actor, version)[0]
+            if document["format"] != "pdf":
+                raise ApiError(409, "PREVIEW_NOT_AVAILABLE", "该格式尚无固定 PDF 预览")
+            source = Path(document["file_path"])
+            try:
+                allowed_root = (self.upload_root / task_id).resolve()
+                within_uploads = source.resolve().is_relative_to(allowed_root)
+            except (OSError, RuntimeError):
+                within_uploads = False
+            if not within_uploads:
+                raise ApiError(409, "PREVIEW_UNAVAILABLE", "预览原件路径无效")
+            try:
+                if source.stat().st_size > MAX_UPLOAD_BYTES:
+                    raise OSError("attachment too large")
+                content = source.read_bytes()
+            except OSError:
+                raise ApiError(409, "PREVIEW_UNAVAILABLE", "预览原件不可读取") from None
+            if (hashlib.sha256(content).hexdigest() != document["sha256"]
+                    or not content.startswith(b"%PDF-")):
+                raise ApiError(409, "PREVIEW_UNAVAILABLE", "预览原件与登记版本不一致")
+            return content
+
+    def get_rule_snapshot(
+        self, task_id: str, actor: User, document_version: int | None = None,
+    ) -> dict:
+        """Keep authorization, version selection and snapshot read consistent."""
+        with self.auth_store.lock:
+            if actor.role != 'legal':
+                self.get_task(task_id, actor)
+                raise ApiError(403, 'FORBIDDEN', '仅法务可读取机器草稿')
+            document = self.get_parsed_document(task_id, actor, document_version)
+            return self.rule_snapshots.read(document)
 
     def get_rule_drafts(
         self, task_id: str, actor: User, document_version: int | None = None,
         review_version: int | None = None,
     ) -> dict:
         """Evaluate persisted evidence without creating a review or changing status."""
+        if actor.role == 'business' or review_version is not None:
+            return self.reviews.read(task_id, actor, document_version, review_version)
+        if actor.role == 'legal':
+            try:
+                return self.reviews.read(task_id, actor, document_version)
+            except ApiError as error:
+                if error.code != 'REVIEW_VERSION_NOT_FOUND':
+                    raise
         try:
             document = self.get_parsed_document(task_id, actor, document_version)
         except ApiError as error:
@@ -394,6 +522,8 @@ class TaskStore:
             raise
         if review_version is not None:
             raise ApiError(404, "REVIEW_VERSION_NOT_FOUND", "审查版本不存在")
+        if document["structured_extraction_status"] == "not_implemented":
+            raise ApiError(409, "RULE_EVIDENCE_NOT_READY", "PDF 字段与条款提取尚未接入，无法生成风险草稿")
         try:
             result = evaluate_persisted_rule_evidence(
                 document["document_version"], document["normalized_text"],
@@ -417,9 +547,21 @@ class TaskStore:
         writeback_status: str | None = None,
         limit: int = 20,
         offset: int = 0,
+        risk_level: str | None = None,
     ) -> dict:
         clauses: list[str] = []
         values: list[object] = []
+        if risk_level is not None:
+            if actor.role == 'admin':
+                raise ApiError(403, 'FORBIDDEN', '管理员不能按合同风险筛选')
+            if risk_level not in ('high', 'medium', 'low'):
+                raise ApiError(422, 'INVALID_RISK_LEVEL', '风险等级无效')
+            clauses.append("""t.legal_status='confirmed' AND EXISTS (
+                SELECT 1 FROM review_versions r WHERE r.task_id=t.id
+                AND r.review_version=t.current_review_version
+                AND r.document_version=t.current_document_version AND r.state='confirmed'
+                AND json_extract(r.payload_json,'$.risk_level')=?)""")
+            values.append(risk_level)
         if actor.role == "business":
             clauses.append("t.owner_user_id = ?")
             values.append(actor.id)
@@ -441,15 +583,14 @@ class TaskStore:
                 f"""SELECT t.*, u.username AS owner_username,
                     d.original_filename, d.format, d.sha256
                 FROM tasks AS t JOIN users AS u ON u.id = t.owner_user_id
-                JOIN document_versions AS d ON d.task_id = t.id
+                LEFT JOIN document_versions AS d ON d.task_id = t.id
                     AND d.version = t.current_document_version
                 {where} ORDER BY t.created_at DESC, t.id DESC LIMIT ? OFFSET ?""",
                 [*values, limit, offset],
             ).fetchall()
         return {"items": [self._visible_summary(row, actor) for row in rows], "total": total}
 
-    @staticmethod
-    def _visible_summary(row: sqlite3.Row, actor: User) -> dict:
+    def _visible_summary(self, row: sqlite3.Row, actor: User) -> dict:
         summary = {
             "task_id": row["id"],
             "owner_username": row["owner_username"],
@@ -475,4 +616,14 @@ class TaskStore:
             }
         if actor.role != "admin" and row["mock_approval_id"] is not None:
             summary["mock_approval_id"] = row["mock_approval_id"]
+        if actor.role != 'admin':
+            with self.auth_store.lock:
+                latest = self.auth_store.connection.execute(
+                    "SELECT document_version,review_version FROM review_versions WHERE task_id=? AND state='confirmed' ORDER BY review_version DESC LIMIT 1",
+                    (row['id'],)).fetchone()
+                summary['latest_confirmed_version'] = dict(latest) if latest else None
+                summary['risk_level'] = None
+                if row['legal_status'] == 'confirmed' and row['current_review_version'] is not None:
+                    summary['risk_level'] = self.reviews.read(row['id'], actor,
+                        row['current_document_version'], row['current_review_version'])['risk_level']
         return summary

@@ -1,4 +1,4 @@
-"""Render a lightweight contact sheet for visual QA of pencil-new.pen."""
+"""Render a lightweight v0.2 contact sheet for visual QA of pencil-new.pen."""
 
 import json
 from pathlib import Path
@@ -57,7 +57,7 @@ for board in DATA["children"]:
     canvas.thumbnail((720, 450), Image.Resampling.LANCZOS)
     images.append((board["name"], canvas))
 
-sheet = Image.new("RGB", (1500, 4 * 510 + 20), "#E9EDE9")
+sheet = Image.new("RGB", (1500, ((len(images) + 1) // 2) * 510 + 20), "#E9EDE9")
 draw = ImageDraw.Draw(sheet)
 label_font = ImageFont.truetype(str(FONT), 20) if FONT.exists() else ImageFont.load_default(size=20)
 for i, (name, canvas) in enumerate(images):
@@ -66,6 +66,6 @@ for i, (name, canvas) in enumerate(images):
     draw.text((x, y), name, font=label_font, fill="#142522")
     sheet.paste(canvas, (x, y + 38))
 
-out = ROOT / "design" / "v0.1-preview.png"
+out = ROOT / "design" / "v0.2-preview.png"
 sheet.save(out)
 print(out)

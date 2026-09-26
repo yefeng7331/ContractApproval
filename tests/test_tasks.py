@@ -5,6 +5,7 @@ import io
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
@@ -220,10 +221,13 @@ class TaskIntakeTests(unittest.TestCase):
         self.assertEqual(pending[0]["id"], MOCK_PENDING_ID)
         self.assertTrue(pending[0]["synthetic"])
 
-        response = self.client.post(
-            f"/api/v1/mock-pending/{MOCK_PENDING_ID}/import",
-            headers=self.headers("business1"),
-        )
+        # Pin the fetched bytes: separate DOCX builds may have different ZIP timestamps.
+        content = synthetic_attachment()
+        with patch("backend.main.fetch_pending_attachment", return_value=content):
+            response = self.client.post(
+                f"/api/v1/mock-pending/{MOCK_PENDING_ID}/import",
+                headers=self.headers("business1"),
+            )
         self.assertEqual(response.status_code, 201, response.text)
         task = response.json()
         self.assertEqual(task["source"], "mock_pending")
@@ -235,7 +239,6 @@ class TaskIntakeTests(unittest.TestCase):
         )
         self.assertEqual(task["submission"]["department"], pending[0]["department"])
         self.assertEqual(task["submission"]["applicant"], pending[0]["applicant"])
-        content = synthetic_attachment()
         self.assertEqual(task["submission"]["sha256"], hashlib.sha256(content).hexdigest())
         row = self.store.connection.execute(
             "SELECT file_path FROM document_versions WHERE task_id = ?", (task["task_id"],)
@@ -247,10 +250,13 @@ class TaskIntakeTests(unittest.TestCase):
             ElementTree.fromstring(archive.read("_rels/.rels"))
             self.assertIn("合成软件采购合同", "".join(document_xml.itertext()))
         audit = self.store.connection.execute(
-            "SELECT action, document_version FROM audit_events WHERE task_id = ?",
+            "SELECT action, document_version FROM audit_events WHERE task_id = ? ORDER BY id",
             (task["task_id"],),
-        ).fetchone()
-        self.assertEqual((audit["action"], audit["document_version"]), ("mock_pending_imported", 1))
+        ).fetchall()
+        self.assertEqual(
+            [(row["action"], row["document_version"]) for row in audit],
+            [("attachment_fetch_started", 1), ("mock_pending_imported", 1)],
+        )
 
         self.assertEqual(
             self.client.get(f"/api/v1/tasks/{task['task_id']}", headers=self.headers("business2")).status_code,

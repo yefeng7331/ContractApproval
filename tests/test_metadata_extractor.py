@@ -16,6 +16,16 @@ def parsed_paragraphs(*texts: str, version: int = 2):
 
 
 class MetadataExtractorTests(unittest.TestCase):
+    def test_heading_suffix_spacing_preserves_source_anchor(self) -> None:
+        for heading in ("合成软件采购合同 (仅供演示，非真实交易)",
+                        "合成软件采购合同　（仅供演示）"):
+            parsed = parsed_paragraphs(heading)
+            field = extract_metadata(parsed).get("title")
+            self.assertEqual(field.value, parsed.paragraphs[0].quote)
+            self.assertEqual(parsed.normalized_text[field.anchor.start:field.anchor.end], field.value)
+        parsed = parsed_paragraphs("软件采购合同 已经完成签署")
+        self.assertIsNone(extract_metadata(parsed).get("title").value)
+
     def test_synthetic_fields_and_exact_anchors(self) -> None:
         parsed = parse_docx(synthetic_attachment(), 3)
         result = extract_metadata(parsed)

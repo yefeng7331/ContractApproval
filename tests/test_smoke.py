@@ -557,7 +557,7 @@ class BackendSmokeTests(unittest.TestCase):
         ).fetchone())
         pdf_id = self.upload(business)["task_id"]
         self.assertEqual(snapshots.persist(pdf_id, 1)["status"],
-                         "unsupported_document_format")
+                         "document_not_ready")
 
     def test_demo_rule_drafts_smoke(self) -> None:
         """F1 yields two anchored drafts; F4 remains clear."""

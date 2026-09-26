@@ -8,6 +8,7 @@ from dataclasses import asdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
+from pathlib import Path
 
 from backend.auth import AuthStore
 
@@ -23,9 +24,10 @@ class JobLease:
 
 
 class JobStore:
-    def __init__(self, auth_store: AuthStore, clock: Callable[[], datetime] | None = None) -> None:
+    def __init__(self, auth_store: AuthStore, clock: Callable[[], datetime] | None = None, *, upload_root=None) -> None:
         self.auth_store = auth_store
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.upload_root = Path(upload_root).resolve() if upload_root is not None else None
 
     def _now(self) -> datetime:
         now = self.clock()
@@ -79,6 +81,22 @@ class JobStore:
                 """
             )
             self._migrate_attempt_outcomes()
+            attempt_columns = {row[1] for row in self.auth_store.connection.execute('PRAGMA table_info(processing_attempts)')}
+            for column in ('error_code', 'error_reason'):
+                if column not in attempt_columns:
+                    self.auth_store.connection.execute(f'ALTER TABLE processing_attempts ADD COLUMN {column} TEXT')
+            columns = {row[1] for row in self.auth_store.connection.execute("PRAGMA table_info(parsed_documents)")}
+            if 'extraction_method' not in columns:
+                self.auth_store.connection.execute("ALTER TABLE parsed_documents ADD COLUMN extraction_method TEXT NOT NULL DEFAULT 'text'")
+            if "page_count" not in columns:
+                self.auth_store.connection.execute("ALTER TABLE parsed_documents ADD COLUMN page_count INTEGER")
+            if "structured_extraction_status" not in columns:
+                self.auth_store.connection.execute(
+                    "ALTER TABLE parsed_documents ADD COLUMN structured_extraction_status TEXT NOT NULL DEFAULT 'available'"
+                )
+                self.auth_store.connection.execute(
+                    "UPDATE parsed_documents SET structured_extraction_status = 'not_implemented' WHERE page_count IS NOT NULL"
+                )
             now = self._now().isoformat()
             self.auth_store.connection.execute(
                 """INSERT OR IGNORE INTO processing_jobs
@@ -314,13 +332,13 @@ class JobStore:
                 connection.execute(
                     """INSERT INTO parsed_documents
                     (task_id, document_version, normalized_text, paragraphs_json,
-                     fields_json, clauses_json, missing_clause_types_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                     fields_json, clauses_json, missing_clause_types_json, created_at, page_count, extraction_method)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (lease.task_id, lease.document_version, parsed.normalized_text,
                      dumps([asdict(item) for item in parsed.paragraphs]),
                      dumps([asdict(item) for item in metadata.fields]),
                      dumps([asdict(item) for item in clauses.clauses]),
-                     dumps(clauses.missing_types), now),
+                     dumps(clauses.missing_types), now, getattr(parsed, "page_count", None), getattr(parsed, 'extraction_method', 'text')),
                 )
                 connection.execute(
                     """UPDATE processing_jobs SET status = 'completed', lease_token = NULL,
@@ -345,7 +363,43 @@ class JobStore:
                 connection.rollback()
                 raise
 
-    def block_parse(self, lease: JobLease, code: str, reason: str) -> bool:
+    def retry_ocr(self, task_id, document_version, actor):
+        """Queue only a recorded, temporary OCR failure; keep previous attempts."""
+        from backend.errors import ApiError
+
+        if actor.role != 'admin':
+            raise ApiError(403, 'FORBIDDEN', '仅管理员可重试')
+        with self.auth_store.lock:
+            connection = self.auth_store.connection
+            connection.execute('BEGIN IMMEDIATE')
+            try:
+                task = connection.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
+                if task is None:
+                    raise ApiError(404, 'TASK_NOT_FOUND', '任务不存在')
+                if task['current_document_version'] != document_version:
+                    raise ApiError(409, 'DOCUMENT_VERSION_CONFLICT', '文档版本已变化')
+                if not (task['blocked_code'] or '').startswith('OCR_'):
+                    connection.rollback()
+                    return None
+                job = connection.execute("SELECT * FROM processing_jobs WHERE task_id=? AND document_version=? AND stage='parse'",
+                    (task_id, document_version)).fetchone()
+                if (task['machine_status'] != 'blocked' or task['recovery_action'] != 'admin_retry'
+                        or job is None or job['status'] != 'blocked'):
+                    raise ApiError(409, 'TASK_STATE_CONFLICT', '当前不是可重试的 OCR 暂时故障')
+                now = self._now().isoformat()
+                connection.execute("UPDATE processing_jobs SET status='pending',updated_at=? WHERE task_id=? AND document_version=? AND stage='parse'",
+                    (now, task_id, document_version))
+                connection.execute("UPDATE tasks SET machine_status='pending',blocked_code=NULL,blocked_reason=NULL,recovery_action=NULL WHERE id=?", (task_id,))
+                connection.execute("INSERT INTO audit_events (task_id,actor_user_id,action,document_version,created_at) VALUES (?,?,'ocr_retry_requested',?,?)",
+                    (task_id, actor.id, document_version, now))
+                connection.commit()
+                return {'task_id': task_id, 'document_version': document_version, 'stage': 'parse',
+                    'attempt': job['attempt_count'] + 1, 'status': 'pending', 'machine_status': 'pending'}
+            except BaseException:
+                connection.rollback()
+                raise
+
+    def block_parse(self, lease: JobLease, code: str, reason: str, *, recovery='replace_attachment') -> bool:
         now = self._now().isoformat()
         with self.auth_store.lock:
             connection = self.auth_store.connection
@@ -361,16 +415,16 @@ class JobStore:
                     (now, lease.task_id, lease.document_version),
                 )
                 finished = connection.execute(
-                    """UPDATE processing_attempts SET outcome = 'blocked', finished_at = ?
+                    """UPDATE processing_attempts SET outcome = 'blocked', finished_at = ?, error_code = ?, error_reason = ?
                     WHERE task_id = ? AND document_version = ? AND stage = 'parse' AND attempt = ?""",
-                    (now, lease.task_id, lease.document_version, lease.attempt),
+                    (now, code, reason, lease.task_id, lease.document_version, lease.attempt),
                 )
                 if finished.rowcount != 1:
                     raise RuntimeError("active parse attempt is missing")
                 connection.execute(
                     """UPDATE tasks SET machine_status = 'blocked', blocked_code = ?,
-                    blocked_reason = ?, recovery_action = 'replace_attachment' WHERE id = ?""",
-                    (code, reason, lease.task_id),
+                    blocked_reason = ?, recovery_action = ? WHERE id = ?""",
+                    (code, reason, recovery, lease.task_id),
                 )
                 connection.commit()
                 return True

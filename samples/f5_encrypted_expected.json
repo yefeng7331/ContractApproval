@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "sample_id": "F5-encrypted-pdf",
+  "file": "f5-encrypted.pdf",
+  "sha256": "cf6b4c30af93c800e29cb21b6cdac0165b902da1ce3582990f558dffb8e5243d",
+  "source_file": "f2-text-software-purchase.pdf",
+  "source_sha256": "1e57bd776b26e4b8529edecabb90fdf56c523d3bd77c530698df692b8842e98c",
+  "document_version": 1,
+  "page_count": 3,
+  "encryption": "RC4-128",
+  "public_test_user_password": "f5-synthetic-user",
+  "public_test_owner_password": "f5-synthetic-owner",
+  "expected_machine_status_after_pdf_processing": "blocked",
+  "expected_recovery_action_after_pdf_processing": "replace_attachment",
+  "expected_parsed_document_count": 0,
+  "expected_risk_draft_count": 0,
+  "current_machine_status": "pending",
+  "pdf_processing_status": "NOT_IMPLEMENTED"
+}

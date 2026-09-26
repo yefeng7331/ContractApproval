@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "sample_id": "F5-severe-blur-scan",
+  "file": "f5-blurred-scan.png",
+  "sha256": "6b38bbef76e70d028e484649b7d26a421d45651dc486539bfd92c602731c7a5d",
+  "source_file": "f3-clear-scan.png",
+  "source_sha256": "c7cf33fff294b6842b679d99d99fdd3a411e6e551a52b8c547dcd2f06cc12548",
+  "document_version": 1,
+  "page_count": 1,
+  "image_size": [2048, 2800],
+  "fixture_effect": "severe_gaussian_blur",
+  "expected_machine_status_after_ocr": "blocked",
+  "expected_recovery_action_after_ocr": "replace_attachment",
+  "expected_parsed_document_count_after_ocr": 0,
+  "expected_risk_draft_count_after_ocr": 0,
+  "current_machine_status": "pending",
+  "ocr_status": "NOT_IMPLEMENTED"
+}
