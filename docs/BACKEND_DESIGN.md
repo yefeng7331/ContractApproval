@@ -1,8 +1,16 @@
 # 后端设计与 API 契约
 
+## 2026-09-26 A8 本机按需处理模式
+
+`scripts/start_local.py --process-local` 仅在显式传入时为本机 API 启用 DOCX/PDF/OCR、规则、模型结果、预览、报告和模拟回写后台处理器；不传时仍为查询模式。`--data-root` 指定 SQLite 与附件的隔离目录，两种模式都使用该目录。模型处理器可将零风险任务记为 `MODEL_NOT_REQUIRED`；有风险任务继续遵守单次付费模型授权和预算约束，启动选项本身不构成调用授权。此入口仅连接本机 Vite 与 API，不新增真实审批平台能力。
+
 ## 2026-09-25 F6 待办附件恢复增量
 
 `backend/pending_imports.py` 在获取附件前事务登记任务及 `attachment_attempts`，预留 document_version=1；未取得附件时不创建 document_versions、正文或规则。任务查询/列表允许附件尚不存在，此时 submission 的 filename/format/sha256 为 null。`POST /api/v1/mock-pending/{id}/import` 仍限业务账号，201 表示任务已建立；必须读取 machine_status，超时为 blocked/ATTACHMENT_FETCH_TIMEOUT/admin_retry，而非把 201 当作处理成功。成功路径沿用本地合成附件，未新增真实平台或 F6 待办 ID。
+
+2026-09-26 大盘合同字段增量：`GET /tasks` 与 `GET /tasks/{id}` 的非管理员摘要可带 `contract={title,amount,currency}`，值只来自当前 `document_version` 已保存的解析字段，未识别为 null。法务可查看当前版，业务仅当前文档版本已确认时可查看；管理员无此字段，业务未确认时整个 `contract` 字段缺席。新版本不会继承旧版解析字段。文件名仍在 `submission.filename` 中，不冒充合同名称；金额与币种分开保留，不推断缺失币种。该增量不改表结构，也不把解析字段视为法务正式判断。
+
+2026-09-26 业务类型增量：上传 multipart 可带 `business_type=软件采购`，其他非空值返回 422；为兼容旧调用，省略时任务仍可创建且业务类型为 null。固定模拟待办带 `business_type=软件采购`，导入保存到任务。`tasks.business_type` 为 nullable 列，现有库启动时补列，旧任务不补猜业务类型；仅业务/法务可见的 `submission.business_type` 返回保存值，管理员任务摘要不返回提交信息。本轮迁移只在隔离临时库运行。
 
 仅管理员 `POST /api/v1/tasks/{id}/retry`，JSON `{"document_version":1}`，优先处理尚未完成的附件获取；同一版本重试并保留历史，正在获取或版本不符为 409。下载成功后沿用原 OCR/规则重试契约。附件尝试数单独持久保存，任务摘要 attempt_count 在进入解析后沿用当前处理阶段计数；附件累计次数以历史接口为准。重复导入仍建立新任务，重试同一任务不会新建任务/文档版本。
 

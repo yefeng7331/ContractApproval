@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formalRisk, isActive, nextStep, phase } from '../src/model.ts';
+import { contractAmount, contractTitle, formalRisk, formatTaskTime, isActive, nextStep, phase } from '../src/model.ts';
 import type { Task } from '../src/model.ts';
 import { ApiError, loadTasks, request } from '../src/api.ts';
 
@@ -8,6 +8,22 @@ const task: Task = { task_id: 'one', owner_username: 'business1', source: 'uploa
   review_version: 2, machine_status: 'completed', legal_status: 'in_review', writeback_status: 'not_written',
   blocked_code: null, blocked_reason: null, recovery_action: null, attempt_count: 1,
   latest_confirmed_version: { document_version: 1, review_version: 1 }, risk_level: 'high' };
+
+test('dashboard creation time uses local display and marks invalid data', () => {
+  const expected = new Date('2026-09-26T08:30:00Z').toLocaleString('zh-CN', { hour12: false });
+  assert.equal(formatTaskTime('2026-09-26T08:30:00Z'), expected);
+  assert.equal(formatTaskTime(''), '时间未记录');
+});
+
+test('contract name and amount show identified data without guessing missing currency', () => {
+  assert.equal(contractTitle(task), '待法务确认');
+  assert.equal(contractAmount(task), '待法务确认');
+  assert.equal(contractTitle({ ...task, contract: { title: null, amount: null, currency: null } }), '未识别');
+  assert.equal(contractAmount({ ...task, contract: { title: null, amount: null, currency: null } }), '未识别');
+  const identified = { ...task, contract: { title: '软件采购合同', amount: '120,000', currency: null } };
+  assert.equal(contractTitle(identified), '软件采购合同');
+  assert.equal(contractAmount(identified), '120,000（币种未识别）');
+});
 
 test('current phase and formal risk do not inherit historical confirmation', () => {
   assert.equal(phase(task), 'review');

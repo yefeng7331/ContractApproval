@@ -174,11 +174,13 @@ def create_app(
         file: Annotated[UploadFile, File()],
         department: Annotated[str, Form()],
         applicant: Annotated[str, Form()],
+        business_type: Annotated[str | None, Form()] = None,
     ):
         try:
             content = await file.read(MAX_UPLOAD_BYTES + 1)
             return task_store.create_task(
-                actor, file.filename or "", content, department, applicant
+                actor, file.filename or "", content, department, applicant,
+                business_type=business_type,
             )
         finally:
             await file.close()

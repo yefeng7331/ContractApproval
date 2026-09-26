@@ -13,14 +13,16 @@ test('upload sends multipart without overriding browser boundary; validates befo
     const body = init?.body as FormData;
     assert.equal(body.get('department'), 'Demo');
     assert.equal(body.get('applicant'), 'Tester');
+    assert.equal(body.get('business_type'), '软件采购');
     assert.equal((body.get('file') as File).name, 'test.PDF');
     return Response.json({ task_id: 'created', document_version: 1 });
   };
   try {
-    assert.throws(() => uploadContract('local-test', new File(['bad'], 'bad.txt'), 'Demo', 'Tester'));
-    assert.throws(() => uploadContract('local-test', new File([], 'empty.pdf'), 'Demo', 'Tester'));
-    assert.throws(() => uploadContract('local-test', new File(['x'], 'x.pdf'), ' ', 'Tester'));
-    const result = await uploadContract('local-test', new File(['%PDF'], 'test.PDF'), ' Demo ', 'Tester');
+    assert.throws(() => uploadContract('local-test', new File(['bad'], 'bad.txt'), 'Demo', 'Tester', '软件采购'));
+    assert.throws(() => uploadContract('local-test', new File([], 'empty.pdf'), 'Demo', 'Tester', '软件采购'));
+    assert.throws(() => uploadContract('local-test', new File(['x'], 'x.pdf'), ' ', 'Tester', '软件采购'));
+    assert.throws(() => uploadContract('local-test', new File(['x'], 'x.pdf'), 'Demo', 'Tester', '其他'));
+    const result = await uploadContract('local-test', new File(['%PDF'], 'test.PDF'), ' Demo ', 'Tester', '软件采购');
     assert.equal(result.task_id, 'created'); assert.equal(calls, 1);
   } finally { globalThis.fetch = original; }
 });

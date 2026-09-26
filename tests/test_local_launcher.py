@@ -21,7 +21,7 @@ def free_port() -> int:
 
 
 class LocalLauncherSmokeTests(unittest.TestCase):
-    def run_launcher(self, backend_port: int, frontend_port: int, data_root: Path):
+    def run_launcher(self, backend_port: int, frontend_port: int, data_root: Path, process_local=False):
         return subprocess.run(
             [
                 sys.executable,
@@ -33,7 +33,7 @@ class LocalLauncherSmokeTests(unittest.TestCase):
                 "--data-root",
                 str(data_root),
                 "--smoke",
-            ],
+            ] + (["--process-local"] if process_local else []),
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -68,6 +68,21 @@ class LocalLauncherSmokeTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"Port {backend_port} is unavailable", result.stderr)
                 self.assertFalse((Path(temp) / "contract_approval.sqlite3").exists())
+
+    def test_opt_in_processing_starts_and_releases_ports(self):
+        with tempfile.TemporaryDirectory(prefix="contract-launcher-processing-") as temp:
+            backend_port = free_port()
+            frontend_port = free_port()
+            while frontend_port == backend_port:
+                frontend_port = free_port()
+            result = self.run_launcher(backend_port, frontend_port, Path(temp), process_local=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('Local processing mode:', result.stdout)
+            self.assertIn('paid model calls require separate authorization', result.stdout)
+            self.assertIn('Launcher smoke PASS', result.stdout)
+            for port in (backend_port, frontend_port):
+                with socket.socket() as connection:
+                    self.assertNotEqual(connection.connect_ex(('127.0.0.1', port)), 0)
 
 
 if __name__ == "__main__":

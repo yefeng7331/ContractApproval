@@ -13,6 +13,7 @@ MOCK_PENDING_ITEM = {
     "title": "合成软件采购合同（演示待办）",
     "department": "采购部",
     "applicant": "张三",
+    "business_type": "软件采购",
     "attachment_filename": "synthetic-software-purchase.docx",
     "synthetic": True,
 }

@@ -1,6 +1,112 @@
 # 实施与验收状态
 
-## 2026-09-26 A7 F5 空文 DOCX 受阻换件本机 HTTP 联调（PENDING_ACCEPTANCE）
+## 2026-09-26 全面验收 A1：接入解析页面核对（PENDING_BROWSER_VERIFICATION）
+
+用户已验收大盘合同名称与金额，按 `MVP_SPEC.md` 第 6 节进入下一项 A1。现有自动证据为上轮 171/171 后端回归中的 F1–F3 上传及模拟待办导入本机 HTTP 链路，以及前端 43/43 逻辑测试和构建；这些不能证明浏览器操作可用。本轮不重复付费 F1 调用，不修改真实业务库。A1 页面检查步骤：在独立数据目录按 README 的 `--process-local --data-root` 方式启动并创建业务、法务、管理员账号；业务在页面分别上传 `samples/f1-software-purchase.docx`、`samples/f2-text-software-purchase.pdf`、`samples/f3-clear-scan.png`，再从模拟待办导入 `demo-f1-001`。确认每项出现任务且状态由待处理进入解析结果；法务在工作台按 `samples/f1_f4_expected.json`、`f2_expected.json`、`f3_expected.json` 核对本版字段、条款、页码及缺失项。F1 预期合同名称“合成软件采购合同（仅供演示，非真实交易）”、金额 `100000`、币种“人民币”；F2/F3 采用各自标注，不能继承 F1 页码。业务在确认前看不到解析字段，管理员无合同内容，其他业务账号不能访问任务；不支持的附件应被拒绝。F1/F2/F3 有规则命中，按需处理模式不会自动发起付费模型调用，机器阶段可能留在 reviewing，不据此判 A1 解析失败。
+
+可单独重跑 A1 本机 HTTP 冒烟：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f1_live_proxy_chain_and_permissions tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f2_pdf_live_proxy_pages_review_and_permissions tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f3_scan_live_proxy_ocr_regions_review_and_permissions -q`。上轮全量已包含这三项，本轮仅修正验收记录，未重复执行；它们使用临时库、合成账号和受控模型响应，不替代页面核对。
+
+本轮无法执行页面点击：当前环境没有可用浏览器或 Playwright，未取得截图、DOM 或交互结果。A1 页面结果记 `UNVERIFIED`，等待实际浏览器核对后才能判定 A1 前端通过；随后按 A2 双向定位继续。目标 Windows 电脑验证依 D-27 后置。此段是验收执行清单与现有证据边界，不等于用户已经验收 A1。
+
+## 2026-09-26 FE1：大盘合同名称与金额；本机全面验收启动（ACCEPTED）
+
+用户本轮明确回复“验收通过，进行下一项”，本项据此记为 `ACCEPTED`，不把该回复视作全面验收全部通过。业务要求 → 实现：`backend/tasks.py` 从当前文档版本已保存的解析字段提取 `title`、`amount`、`currency`，在任务列表与详情摘要返回 `contract`；法务可看当前版，业务仅当前版法务已确认时可看，管理员无此字段。`frontend/src/model.ts`、`main.tsx` 在大盘和详情展示合同名称与金额，文件名另列；字段或币种不能识别时明示，不用文件名、旧版数据或猜测币种替代。无新增表结构、无真实库迁移或付费调用。
+
+独立冒烟 `tests.test_dashboard_contract` 覆盖解析前后、列表/详情一致、法务确认前后、管理员和其他业务权限、新文档版本隔离；`frontend/tests/dashboard.test.ts` 覆盖展示与缺失值。验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_dashboard_contract -q` 1/1 PASS；`node --experimental-strip-types --test frontend/tests/dashboard.test.ts` 6/6 PASS；`npm.cmd --prefix frontend test` 43/43 PASS；`npm.cmd --prefix frontend run build` PASS。测试均使用合成数据和临时库；未动真实业务库。
+
+全面验收按 `MVP_SPEC.md` 第 6 节 A1–A8 与 F1–F6 核对。上轮全量后端回归 `.\.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests -q` 171/171 PASS（588.590 秒），其中 `tests.test_local_http_acceptance` 包含 9 条本机真实 Uvicorn + Vite `/api` 代理的 F1–F6 合成链路、权限、恢复和模拟回写。此为合成数据、受控模型响应及临时库技术证据：A1–A7 的 API/本机 HTTP 路径已覆盖，A8 的 F1 API 与本机 HTTP 路径已覆盖。页面真实点击、原文与风险卡片双向高亮、下载体验均为 `UNVERIFIED`：当前执行环境没有可用浏览器或 Playwright。D-27 已将目标 Windows 电脑验证推迟到本机总体验收之后，不把目标机结果当成本轮完成条件。F1 一次真实 DeepSeek 调用曾由用户手动执行并验收，见下文 2026-09-25 最新验收记录；本轮只读核对默认库中该任务 `model_jobs` 为 `completed`、`code=NULL`，有同一授权键和已保存结果，预算记录为 `settled` 且有 usage；这支持该调用已完成，但供应商账单金额未独立核对。D-21 已替代更早的线上 token 绝对上界阻塞，不能再将其写为当前阻塞。规则与示范条款的专业法务核定仍 `UNVERIFIED`。全面验收已进入执行阶段，尚不能宣布 A1–A8 全部通过。
+
+## 2026-09-26 FE1：大盘创建时间展示（ACCEPTED）
+
+用户本轮明确回复“验收通过”，本项据此记为 `ACCEPTED`。以下保留交付当时的技术证据和限制。
+
+上一项 FE1/FE2 业务类型录入与大盘展示已获用户本轮回复“验收通过，进行下一步”，据此记为 `ACCEPTED`。本轮业务要求 → 实现：`GET /tasks` 已返回任务建立时的 `created_at`，`frontend/src/main.tsx` 在每条任务的列表单元展示“创建：…（本机时间）”，与详情页共用 `frontend/src/model.ts` 的格式化函数；非法或缺失时间显示“时间未记录”，不显示 `Invalid Date`。对管理员同样仅显示任务建立时间，不增加合同内容可见范围。合同名称与金额仍待单独处理，不能从尚未确认的解析结果向业务提前暴露。
+
+独立冒烟 `node --experimental-strip-types --test frontend/tests/dashboard.test.ts` 5/5 PASS（含合法 UTC 时间按本机时区展示及异常值提示）；`npm.cmd --prefix frontend test` 42/42 PASS，`npm.cmd --prefix frontend run build` PASS。已有后端字段未改，未操作真实数据库。浏览器实际列表显示、跨时区人工核对仍 `UNVERIFIED`；本项待用户验收。
+
+## 2026-09-26 FE1/FE2：业务类型录入与大盘展示（ACCEPTED）
+
+用户本轮回复“验收通过，进行下一步”，本项据此记为已验收。以下保留交付时的技术证据与限制。
+
+上一项 FE1 任务列表权限拒绝处理已获用户本轮回复“验收通过，请进行下一项”，据此记为 `ACCEPTED`。本轮业务要求 → 实现：上传合成合同须在前端选择“软件采购”演示类型，`frontend/src/Intake.tsx` / `intake.ts` 写入 multipart；`backend/main.py` / `tasks.py` 验证并保存至任务，模拟待办固定带相同类型；`GET /tasks` 与详情对业务、法务返回 `submission.business_type`，大盘显示业务类型，老任务或旧调用没有该字段时显示“未记录”。管理员继续只见职责范围状态，不返回提交信息。新增 nullable 列兼容旧任务；本轮仅在隔离临时库运行，没有启动或迁移实际业务库。现有 API 客户端未传业务类型仍可创建旧口径任务，新前端要求明确选择。
+
+独立冒烟 `./.venv/Scripts/python.exe -X utf8 -m unittest tests.test_business_type -v` 7/7 PASS（含测试夹具附带的 5 项复核回归；上传/模拟导入成功、列表/详情可见、越权/非法类型拒绝及旧请求兼容）；`npm.cmd --prefix frontend test` 41/41 PASS，`npm.cmd --prefix frontend run build` PASS。均为隔离 API 与逻辑验证；浏览器实际选择、提交及页面显示仍 `UNVERIFIED`。金额、合同名称独立字段及创建时间的大盘展示尚未完成，本项不代表大盘整体符合 MVP。
+
+## 2026-09-26 FE1：任务列表权限拒绝时清理旧视图（ACCEPTED）
+
+用户本轮回复“验收通过，请进行下一项”，本项据此记为已验收。以下保留交付时的技术证据与限制。
+
+上一项 FE6 模拟回写状态轮询故障恢复已获用户回复“验收通过，进行下一项”，据此记为 `ACCEPTED`。本轮业务要求 → 实现：任务列表的只读轮询收到 403 时，`frontend/src/taskPolling.ts` 停止自动重试并通知页面；`frontend/src/main.tsx` 清除缓存任务、详情、上传回执与上次更新时间，隐藏原有任务和操作区，显示无权访问及手动重新读取入口。401 仍退出登录；短暂网络错误仍保留上次任务、提示可能过期并重试。此处理遵守前端设计中 403 不展示缓存内容的约束。
+
+独立冒烟 `node --experimental-strip-types --test frontend/tests/taskPolling.test.ts` 3/3 PASS（合成成功读取→403 触发清理回调并停止轮询；401 与暂时故障路径）；`npm.cmd --prefix frontend test` 41/41 PASS；`npm.cmd --prefix frontend run build` PASS（TypeScript + Vite，54 modules）。权限变化为受控模拟，实际浏览器页面点击、服务端实时撤权场景仍 `UNVERIFIED`；本项待用户验收。
+
+## 2026-09-26 FE6：模拟回写状态轮询故障恢复（ACCEPTED）
+
+用户本轮回复“验收通过，进行下一项”，本项据此记为已验收。以下保留交付时的技术证据与限制。
+
+上一项 FE5 报告状态轮询故障恢复已获用户本轮明确验收。本轮业务要求 → 实现：`frontend/src/writebackPolling.ts` 对同任务、同文档及审查版本的模拟回写状态进行只读 GET 轮询；`writing` 状态读取遇短暂网络、429 或 5xx 故障时保留上次成功状态、提示可能过期并每 5 秒自动重试，恢复后清除提示。401 退出；403、确认版本不一致或成功状态缺少评论 ID 时停止轮询并隐藏旧状态；切换任务、版本或离开页面会取消请求与计时器。`frontend/src/Writeback.tsx` 接入该流程，读取故障期间禁用提交并保留手动刷新入口；回写 POST 仍只由法务人工触发，结果不确定时不会自动重发。仅本地模拟，不连接真实审批平台。
+
+独立冒烟 `node --experimental-strip-types --test frontend/tests/writebackPolling.test.ts` 2/2 PASS（合成结果：写入中→连接失败→成功且未再提交 POST；401、403、错版停止轮询）。`npm.cmd --prefix frontend test` 40/40 PASS；`npm.cmd --prefix frontend run build` PASS（TypeScript + Vite，54 modules）。故障恢复为受控模拟，实际浏览器断连、视觉与点击仍 `UNVERIFIED`；FE6 此增量已由用户验收。
+
+## 2026-09-26 FE5：报告状态轮询故障恢复（ACCEPTED）
+
+用户本轮回复“验收通过，进入下一项”，本项据此记为已验收。以下保留交付时的技术证据与限制。
+
+上一项 FE1/A8 任务列表轮询故障恢复已获用户本轮明确验收。本轮业务要求 → 实现：`frontend/src/reportPolling.ts` 对确认版本的 Markdown/PDF 报告状态继续每 5 秒查询；遇短暂网络、429 或 5xx 故障时保留上次成功状态、提示可能过期并自动重试，恢复后清除提示。401 退出会话；403 等非临时错误、任务 ID 或审查版本不一致时停止轮询并隐藏旧状态；切换任务、版本或离开页面会取消请求与计时器。`frontend/src/Reports.tsx` 接入此流程，读取失败时仍提供手动刷新入口，已就绪文件的后端权限和版本校验保持有效。未接入真实审批平台或付费模型。
+
+独立冒烟 `node --experimental-strip-types --test frontend/tests/reportPolling.test.ts` 2/2 PASS（合成报告：待生成→连接失败→恢复就绪；401、403、版本不一致停止轮询）。`npm.cmd --prefix frontend test` 38/38 PASS；`npm.cmd --prefix frontend run build` PASS（TypeScript + Vite，53 modules）。断连与状态转换为受控模拟，实际浏览器视觉、点击和断连仍 `UNVERIFIED`；FE5 此增量待用户验收。
+
+## 2026-09-26 FE1/A8：任务列表轮询故障恢复（ACCEPTED）
+
+用户本轮回复“验收成功，请进行下一项”，本项据此记为已验收。以下保留交付时的技术证据与限制。
+
+上一项 A8 本机按需处理模式已获用户明确验收。本轮业务要求 → 实现：`frontend/src/taskPolling.ts` 承接已有 5 秒任务轮询，短暂网络/API 故障后继续重试；`frontend/src/main.tsx` 保留上次成功读取的任务及更新时间，显示读取失败与信息可能过期的提示，可手动重读，成功后清除提示。401 会话失效仍退出；无活跃任务时停止轮询，已取消或卸载的轮询不再更新页面。已有任务上的写操作仍由后端逐接口校验版本、状态和权限。
+
+独立冒烟 `node --experimental-strip-types --test frontend/tests/taskPolling.test.ts` 2/2 PASS（合成任务：活跃状态→连接失败→恢复完成；旧任务不清空、重试间隔和 401 退出）。`npm.cmd --prefix frontend run build` PASS（TypeScript + Vite，52 modules）。网络失败为受控模拟，实际浏览器断连、视觉与点击仍 `UNVERIFIED`；A8 总体验收保持 `PARTIAL`。
+
+## 2026-09-26 A8 本机按需处理模式与 F4 页面验收前置链路（ACCEPTED）
+
+用户随后回复“验收通过，进行下一项”，本项记为已验收。以下保留交付时的证据与限制。
+
+用户已明确验收 F6 首次模拟回写失败、重试与去重本机 HTTP 联调。本轮业务要求 → 实现：`scripts/start_local.py --process-local` 显式开启 `backend/local_runtime.py` 已有的解析、规则、模型结果、预览、报告和模拟回写后台处理器，默认查询模式保持原有语义。模型处理器对无规则命中的 F4 自动保存 `MODEL_NOT_REQUIRED`；有风险命中的 F1 仍等待单次单独授权，不发送付费请求。此模式可用隔离 `--data-root` 为 F4 页面验收准备完整的真实本机处理链，尚无浏览器点击证据。
+
+独立冒烟 `tests/test_local_processing_launcher.py` 用临时 SQLite、合成账号和真实 Uvicorn/Vite 代理核对 F4 上传、无命中完成、法务复核确认、两种报告、模拟回写和角色拒绝；另上传 F1 验证两条规则风险已保存而模型结果与提前确认仍被拒绝。`tests/test_local_launcher.py` 核对显式开关启动、端口释放及默认查询模式。技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_processing_launcher -v` 1/1 PASS；`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_launcher -q` 3/3 PASS。均使用临时数据与合成账号，无付费模型请求。本机没有可用的 Playwright 或浏览器可执行文件，页面点击与视觉仍 `UNVERIFIED`；A8 总体验收保持 `PARTIAL`。
+
+## 2026-09-26 A7 F6 首次模拟回写失败、重试与去重本机 HTTP 联调（ACCEPTED）
+
+用户本轮回复“验收通过，请进行下一项”，F6 回写失败、重试与去重联调据此记为已验收。以下保留交付时的技术证据与边界。
+
+用户已明确验收 F6 模拟待办附件超时与管理员重试本机 HTTP 联调。本轮业务要求 → 实现与验证：`tests/test_local_http_acceptance.py::test_f6_writeback_failure_live_proxy_retry_dedup_and_permissions` 使用临时 SQLite、合成账号与 F1 固定合同，经真实 Uvicorn 和 Vite `/api` 代理完成法务确认后的模拟回写。确定性内存评论依赖首次失败，接口显示 `failed/MOCK_WRITEBACK_FAILED`、无评论 ID；法务重试后为 `success`，保留失败与成功两次尝试，同版重复提交返回同一评论 ID 且不增加评论或尝试次数。覆盖确认前 409、无效目标 404、非法版本 422、未登录 401、越权 403/404，以及业务账号与管理员读取字段范围。测试不连接真实审批平台或付费模型，内存依赖仅用于注入故障，应用回写状态和尝试记录保存于临时 SQLite。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f6_writeback_failure_live_proxy_retry_dedup_and_permissions -v` 1/1 PASS；`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance -q` 9/9 PASS。真实平台写入、浏览器点击仍 `UNVERIFIED`，A8 总体验收仍 `PARTIAL`。
+
+## 2026-09-26 A7 F6 模拟待办附件超时与管理员重试本机 HTTP 联调（ACCEPTED）
+
+用户本轮回复“验收通过，继续下一项”，F6 模拟待办附件超时联调据此记为已验收。以下保留交付时的技术证据与边界。
+
+用户已明确验收 F5 严重模糊扫描件受阻换件本机 HTTP 联调。本轮业务要求 → 实现与验证：`tests/test_local_http_acceptance.py::test_f6_pending_attachment_timeout_live_proxy_admin_retry_and_permissions` 用临时 SQLite、合成账号、确定性首次超时故障源，通过真实 Uvicorn 与 Vite `/api` 代理导入模拟待办。首次获取附件后任务为 `blocked/ATTACHMENT_FETCH_TIMEOUT/admin_retry`，尝试次数 1，无附件摘要、风险等级或可读正文/风险；未取得附件时正文和风险 API 返回 `DOCUMENT_VERSION_NOT_FOUND`（404），提前确认被拒绝。管理员可查看首次失败历史，按原文档版本重试后尝试次数为 2、附件入队；错版、越权、未登录及重复重试被拒绝。随后真实 DOCX 解析和规则作业完成，同版产生两条固定演示风险，首次失败及第二次成功的尝试历史均保留。不请求外部审批平台、付费模型或真实网络超时。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f6_pending_attachment_timeout_live_proxy_admin_retry_and_permissions -v` 1/1 PASS；`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance -q` 8/8 PASS（F1–F6 含 F5 三类故障）。此证据限本机 HTTP 和确定性故障注入；真实平台网络超时、浏览器点击仍 `UNVERIFIED`，A8 总体验收仍 `PARTIAL`。
+
+## 2026-09-26 A7 F5 严重模糊扫描件受阻换件本机 HTTP 联调（ACCEPTED）
+
+用户本轮回复“验收通过，请进行下一项”，F5 严重模糊扫描件联调据此记为已验收。以下保留交付时的技术证据与边界。
+
+用户已明确验收 F5 加密 PDF 受阻换件本机 HTTP 联调。本轮业务要求 → 实现与验证：`tests/test_local_http_acceptance.py::test_f5_blurred_scan_live_proxy_block_replacement_and_permissions` 使用临时 SQLite、合成账号及固定严重模糊 PNG，经真实 Uvicorn 与 Vite `/api` 代理上传。真实 CPU OCR 返回 `blocked/OCR_UNREADABLE`，有受阻原因、`replace_attachment` 恢复动作且无风险等级；正文、规则快照及提前确认均被拒绝。管理员可查看 v1 故障记录但不能重试；只有所属业务账号可换传 F3 清晰 PNG 成为 v2，错版及越权换件被拒绝。v2 OCR 成功后可读取新正文，v1 受阻记录保留且旧版无可读正文；不调用付费模型或真实审批平台。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f5_blurred_scan_live_proxy_block_replacement_and_permissions -v` 1/1 PASS；`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance -q` 7/7 PASS（F1–F5 三类故障）。此证据限固定合成样例的本机 HTTP 与持久化链路；其他模糊程度、真实业务扫描件、浏览器点击仍 `UNVERIFIED`，A8 总体验收仍 `PARTIAL`。
+
+## 2026-09-26 A7 F5 加密 PDF 受阻换件本机 HTTP 联调（ACCEPTED）
+
+用户本轮回复“验收通过，请继续下一项”，F5 加密 PDF 联调据此记为已验收。以下保留交付时的技术证据与边界。
+
+用户已明确验收 F5 空文 DOCX 受阻换件本机 HTTP 联调。本轮业务要求 → 实现与验证：`tests/test_local_http_acceptance.py::test_f5_encrypted_pdf_live_proxy_block_replacement_and_permissions` 使用临时 SQLite、合成账号和固定 F5 加密 PDF，经真实 Uvicorn 与 Vite `/api` 代理上传。PDF 处理后任务为 `blocked/PDF_ENCRYPTED`，有受阻原因、`replace_attachment` 恢复动作且无风险等级；正文、规则快照及提前确认均被拒绝。管理员可查看 v1 故障记录但不能重试；只有所属业务账号可用有效 F2 文本 PDF 换成 v2，错版及越权换件被拒绝。v2 解析成功后可读取新正文，v1 受阻记录保留且无可读正文；不调用付费模型或真实审批平台。
+
+技术验证：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f5_encrypted_pdf_live_proxy_block_replacement_and_permissions -v` 1/1 PASS；`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance -q` 6/6 PASS（F1–F5 空文及加密 PDF）。此证据限 F5 加密 PDF 的本机 HTTP 与持久化链路；严重模糊扫描件的本机 HTTP 联调、浏览器点击仍 `UNVERIFIED`，A8 总体验收仍 `PARTIAL`。
+
+## 2026-09-26 A7 F5 空文 DOCX 受阻换件本机 HTTP 联调（ACCEPTED）
+
+用户本轮回复“上述功能验收通过，请继续下一项”，F5 空文 DOCX 联调据此记为已验收。以下保留交付时的技术证据与边界。
 
 用户已明确验收 F4 修订合同零误报本机 HTTP 联调。本轮业务要求 → 实现与验证：`tests/test_local_http_acceptance.py::test_f5_empty_docx_live_proxy_block_replacement_and_permissions` 使用临时 SQLite、合成账号及固定 F5 空文 DOCX，经真实 Uvicorn 和 Vite `/api` 代理上传。解析后任务为 `blocked/DOCX_EMPTY`，有受阻原因，恢复动作为 `replace_attachment`，无风险等级；正文、规则快照及提前确认均被拒绝。管理员处理记录保留 v1 解析受阻代码；管理员重试被拒绝，只有任务所属业务账号可上传有效 F4 DOCX 形成 v2，过期版本及越权换件被拒绝。v2 解析成功后可读取新正文，旧版受阻记录仍在，旧版正文不可读取。未调用外部模型或真实审批平台。
 

@@ -54,10 +54,10 @@ class PendingImportStore:
         now = self.auth._clock()
         # Register ownership and attempt BEFORE fetching. No placeholder document or file.
         with self.tasks.model_budget._transaction() as db:
-            db.execute('''INSERT INTO tasks (id,owner_user_id,source,department,applicant,
+            db.execute('''INSERT INTO tasks (id,owner_user_id,source,department,applicant,business_type,
                 created_at,current_document_version,machine_status,legal_status,writeback_status,mock_approval_id)
-                VALUES (?,?,'mock_pending',?,?,?,1,'pending','pending','not_written',?)''',
-                (task, actor.id, MOCK_PENDING_ITEM['department'], MOCK_PENDING_ITEM['applicant'],
+                VALUES (?,?,'mock_pending',?,?,?,?,1,'pending','pending','not_written',?)''',
+                (task, actor.id, MOCK_PENDING_ITEM['department'], MOCK_PENDING_ITEM['applicant'], MOCK_PENDING_ITEM['business_type'],
                  now.isoformat(), MOCK_PENDING_ITEM['id']))
             token = self._claim(db, task, actor.id, 1, now)
         return self._fetch(task, token, 1, actor, fetch)

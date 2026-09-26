@@ -35,30 +35,30 @@
 
 ## F5 严重模糊扫描件子场景
 
-`f5-blurred-scan.png` 是从已验收的 F3 清晰合成合同图片进行半径 22 的高斯模糊后得到的单页灰度图。肉眼查看已无法辨认条款，最深像素也不低于灰度 220；原图与模糊图的哈希、尺寸、预期故障状态和恢复动作记录在 [f5_blurred_expected.json](f5_blurred_expected.json)。样例只含合成内容，无文字层。预期未来 OCR 处理后进入 `blocked/replace_attachment`，没有可靠正文、原文锚点或风险草稿。具体故障代码需在 OCR 功能实现时定案，当前不伪造该代码。
+`f5-blurred-scan.png` 是从已验收的 F3 清晰合成合同图片进行半径 22 的高斯模糊后得到的单页灰度图。肉眼查看已无法辨认条款，最深像素也不低于灰度 220；原图与模糊图的哈希、尺寸、预期故障状态和恢复动作记录在 [f5_blurred_expected.json](f5_blurred_expected.json)。样例只含合成内容，无文字层。真实 CPU OCR 处理此固定样例后进入 `blocked/OCR_UNREADABLE/replace_attachment`，没有可靠正文、原文锚点或风险草稿。
 
-当前可按 README 的附件步骤上传此 PNG，得到版本 1 和 `machine_status=pending`；法务读取正文或规则草稿得到 409/`DOCUMENT_NOT_READY`。这说明接入与“没有虚假结论”已验证，**不说明 OCR 已能判断严重模糊**。独立冒烟：`python -X utf8 -m unittest tests.test_fixed_samples.FixedSampleSmokeTests.test_f5_blurred_scan_fixed_sample_smoke -v`，使用合成账号和临时 SQLite，核对文件、上传、未登录/越权、未就绪与伪 PNG 拒绝。可用本机已有 Pillow 执行 `python -X utf8 samples/build_f5_blurred_scan.py` 重建；无需后端运行依赖。F5 全链路仍待 OCR 与恢复验证。
+上传回执初始为版本 1、`machine_status=pending`；OCR 作业运行后为 `blocked/OCR_UNREADABLE/replace_attachment`，正文与风险快照均不可读取。所属业务账号换传 F3 清晰图片成为版本 2 后可恢复解析，旧版故障记录保留。本机 HTTP 独立冒烟：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f5_blurred_scan_live_proxy_block_replacement_and_permissions -v`，使用临时 SQLite、合成账号、真实 CPU OCR 与 Vite 代理，核对受阻、换件、版本冲突和权限。文件接入冒烟：`python -X utf8 -m unittest tests.test_fixed_samples.FixedSampleSmokeTests.test_f5_blurred_scan_fixed_sample_smoke -v`。可用本机已有 Pillow 执行 `python -X utf8 samples/build_f5_blurred_scan.py` 重建；无需后端运行依赖。其他模糊程度和真实业务扫描件尚未验证。
 
 ## F5 加密 PDF 子场景
 
-`f5-encrypted.pdf` 从 F2 的三页合成合同生成；固定哈希、来源与未来阻塞/恢复预期见 [f5_encrypted_expected.json](f5_encrypted_expected.json)。公开测试用户口令为 `f5-synthetic-user`，所有者口令为 `f5-synthetic-owner`，均只用于本合成样例。RC4-128 是故障样例的兼容性选项，不作为生产加密方案。
+`f5-encrypted.pdf` 从 F2 的三页合成合同生成；固定哈希、来源与阻塞/恢复预期见 [f5_encrypted_expected.json](f5_encrypted_expected.json)。公开测试用户口令为 `f5-synthetic-user`，所有者口令为 `f5-synthetic-owner`，均只用于本合成样例。RC4-128 是故障样例的兼容性选项，不作为生产加密方案。
 
 先执行 `python -m pip install --target .tools/pdf-fixtures -r samples/requirements-pdf-fixtures.txt` 安装固定版本的样例工具。可运行 `python -X utf8 samples/build_f5_encrypted_pdf.py` 重建；重建后须核对固定哈希。工具目录被 Git 忽略，后端运行无需导入 pypdf。
 
-独立冒烟：`python -X utf8 -m unittest tests.test_f5_encrypted_pdf -v`。测试实际尝试空口令、错误口令、正确用户/所有者口令；解密后按 F2 独立分页逐字核对 F1 静态原文，比较页面内容流和尺寸；临时库验证上传成功、未登录/越权、结果未就绪、伪 PDF 拒绝及零解析/草稿。缺少样例工具时测试明确失败，不跳过。
+独立文件冒烟：`python -X utf8 -m unittest tests.test_f5_encrypted_pdf -v`。它核对口令、解密内容和上传后、PDF 作业运行前的 `pending` 状态；不会执行 PDF 作业。后续本机 HTTP 冒烟 `tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f5_encrypted_pdf_live_proxy_block_replacement_and_permissions` 已验证作业运行后的 `blocked/PDF_ENCRYPTED/replace_attachment`、无虚假结论及换件恢复。缺少样例工具时文件冒烟明确失败，不跳过。
 
 验收可用 PDF 阅读器打开文件：空口令或错误口令应不能读取，正确口令应显示 F2 三页合同；本轮尚未人工验证阅读器显示。当前上传后仍为 `pending`，未来应由 PDF 处理器识别为 `blocked/replace_attachment`，不从加密内容生成虚假结论。具体错误代码和实际换版恢复待该处理功能实现；本样例通过不代表 F5 全链路完成。
 
 ## F6 待办附件首次超时子场景
 
-`f6_pending_timeout.py` 是供后续处理器测试使用的确定性依赖故障源。`fetch_attachment(attempt_number)` 的第一次尝试立即抛出 `TimeoutError`，第二次及以后返回经过 SHA-256 校验的固定 F1 原件；非法尝试号与被篡改原件均拒绝。尝试号由调用方传入，没有进程内“一次性开关”，不同测试或重启不会自行改变故障计划。脚本不访问网络、不等待真实超时、不创建任务，也不保存尝试次数。
+`f6_pending_timeout.py` 是处理器测试使用的确定性依赖故障源。`fetch_attachment(attempt_number)` 的第一次尝试立即抛出 `TimeoutError`，第二次及以后返回经过 SHA-256 校验的固定 F1 原件；非法尝试号与被篡改原件均拒绝。尝试号由调用方传入，没有进程内“一次性开关”，不同测试或重启不会自行改变故障计划。脚本不访问网络、不等待真实超时、不创建任务，也不保存尝试次数。
 
 运行 `python -X utf8 samples/f6_pending_timeout.py`，预期输出两行 JSON：第一行为 `dependency_outcome=timeout`、`attachment_returned=false`，第二行为 `attachment_available`、`attachment_returned=true` 与 F1 原件哈希。每行都标明 `scope=dependency_fixture_only`。独立冒烟为 `python -X utf8 -m unittest tests.test_f6_pending_timeout -v`，覆盖超时、重试返回固定附件、重复序列、非法尝试号、原件篡改和实际 CLI 输出。
 
-[f6_pending_timeout_expected.json](f6_pending_timeout_expected.json) 的处理器预期已接入 `backend/pending_imports.py`：首次超时为 `blocked/admin_retry`，不得生成解析/风险草稿；管理员按原文档版本重试，附件尝试次数变为 2，保留首次失败记录，不新建附件版本。独立业务冒烟：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_pending_imports -v`，将本固定故障源注入真实 HTTP 下载适配器，验证 API、权限、持久化、重开连接、过期租约、并发、迟到结果及存储回滚。技术验证使用故障注入，用户验收待确认。当前 API 仍只列出 `demo-f1-001`，没有新增 F6 待办 ID；正常导入不故意制造超时。
+[f6_pending_timeout_expected.json](f6_pending_timeout_expected.json) 的处理器预期已接入 `backend/pending_imports.py`：首次超时为 `blocked/admin_retry`，不得生成解析/风险草稿；管理员按原文档版本重试，附件尝试次数变为 2，保留首次失败记录，不新建附件版本。后端业务冒烟：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_pending_imports -v`，验证 API、权限、持久化、重开连接、过期租约、并发、迟到结果及存储回滚。本机 HTTP 联调：`.\.venv\Scripts\python.exe -X utf8 -m unittest tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f6_pending_attachment_timeout_live_proxy_admin_retry_and_permissions -v`，经 Vite 代理核对受阻、管理员重试、同版解析与历史；该联调已由用户验收。技术验证使用故障注入，不代表真实平台网络超时。当前 API 仍只列出 `demo-f1-001`，没有新增 F6 待办 ID；正常导入不故意制造超时。
 
 ## F6 首次模拟回写失败与重复提交子场景
 
 `f6_writeback_failure.py` 是仅在内存中运行的合成评论依赖。运行 `python -X utf8 samples/f6_writeback_failure.py` 得到四行 JSON：首次失败、同版重试成功、同版重复提交返回同一评论 ID 且不新增评论、新确认版本得到独立 ID。每行均标记 `scope=in_memory_dependency_fixture_only`，评论正文包含“模拟回写”。静态结果和未来应用状态预期见 [f6_writeback_expected.json](f6_writeback_expected.json)。
 
-独立冒烟 `python -X utf8 -m unittest tests.test_f6_writeback_failure -v` 核对首次失败无评论、重试与同版去重、不同版本独立评论、同键不同内容拒绝、参数边界和脚本实际输出。它不写入 SQLite 或连接真实审批平台；进程重启后内存评论不存在。法务确认前拒绝、评论持久化、跨重启幂等性、三角色权限及正式回写状态只列为后续 API 的验收预期，目前没有实现证据。F6 全链路仍未验收。
+独立冒烟 `python -X utf8 -m unittest tests.test_f6_writeback_failure -v` 核对首次失败无评论、重试与同版去重、不同版本独立评论、同键不同内容拒绝、参数边界和脚本实际输出。此故障依赖本身不写入 SQLite 或连接真实审批平台；进程重启后其内存评论不存在。应用已通过 `backend/writeback.py` 将同版模拟回写状态、尝试历史和评论持久化到 SQLite；后端冒烟 `tests.test_writeback` 覆盖确认前拒绝、跨连接幂等与角色权限。本机 HTTP 联调 `tests.test_local_http_acceptance.LocalHttpAcceptanceTests.test_f6_writeback_failure_live_proxy_retry_dedup_and_permissions` 经 Vite 代理核对首次失败、重试、去重与权限，待用户验收。真实审批平台回写与浏览器点击仍未验证。

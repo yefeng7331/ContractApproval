@@ -47,7 +47,7 @@ export function Intake({ token, onCreated, onExpired }: { token: string; onCreat
   function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    void submit(signal => uploadContract(token, data.get('file') as File, String(data.get('department')), String(data.get('applicant')), signal));
+    void submit(signal => uploadContract(token, data.get('file') as File, String(data.get('department')), String(data.get('applicant')), String(data.get('business_type')), signal));
   }
   return <section className="intake">
     <p className="notice">仅上传合成演示合同。接收成功表示任务已登记，不代表解析、审查或法务确认完成。当前查询验收启动模式不运行后台解析，新任务会保持待处理。</p>
@@ -56,13 +56,14 @@ export function Intake({ token, onCreated, onExpired }: { token: string; onCreat
       <form onSubmit={upload} aria-busy={busy}><fieldset disabled={busy || uncertain}>
         <label>送审部门<input name="department" required maxLength={120} /></label>
         <label>申请人<input name="applicant" required maxLength={120} /></label>
+        <label>业务类型<select name="business_type" required defaultValue=""><option value="" disabled>请选择业务类型</option><option value="软件采购">软件采购（演示）</option></select></label>
         <label>合成合同附件<input name="file" type="file" required accept={acceptedFiles} /></label>
         <small>DOCX、PDF、PNG、JPEG、TIFF · 单个附件不超过 25 MiB。格式与内容由后端再次校验。</small>
         <button className="primary">{busy ? '正在提交…' : '上传并建立任务'}</button>
       </fieldset></form>
     </section><section className="panel"><p className="eyebrow">模拟审批来源</p><h2>导入模拟待办</h2><p className="muted">使用本地合成附件与申请信息，不连接真实审批平台。每次导入都会新建任务。</p>
       {loading ? <p aria-busy="true">正在读取模拟待办…</p> : listError ? <div className="error" role="alert">{listError}<button disabled={busy} onClick={() => setRefresh(value => value + 1)}>重新读取待办</button></div>
-        : !items.length ? <p className="empty">暂无模拟待办</p> : items.map(item => <article className="pending-item" key={item.id}><h3>{item.title}</h3><p className="muted">{item.department} · {item.applicant}</p><p className="muted">{item.attachment_filename}</p><small>待办编号：{item.id}</small><button disabled={busy || uncertain} onClick={() => void submit(signal => importPending(token, item.id, signal))}>{busy ? '正在提交…' : '导入并建立任务'}</button></article>)}
+        : !items.length ? <p className="empty">暂无模拟待办</p> : items.map(item => <article className="pending-item" key={item.id}><h3>{item.title}</h3><p className="muted">{item.department} · {item.applicant} · {item.business_type}</p><p className="muted">{item.attachment_filename}</p><small>待办编号：{item.id}</small><button disabled={busy || uncertain} onClick={() => void submit(signal => importPending(token, item.id, signal))}>{busy ? '正在提交…' : '导入并建立任务'}</button></article>)}
     </section></div>
   </section>;
 }

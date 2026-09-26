@@ -41,6 +41,8 @@ def run() -> int:
     parser.add_argument("--backend-port", type=int, default=8010)
     parser.add_argument("--frontend-port", type=int, default=5173)
     parser.add_argument("--data-root", type=Path)
+    parser.add_argument("--process-local", action="store_true",
+                        help="Run local parsing, review preparation, reports, and mock writeback; paid model dispatch remains manual")
     parser.add_argument("--smoke", action="store_true")
     args = parser.parse_args()
 
@@ -60,6 +62,7 @@ def run() -> int:
 
     backend_env = os.environ.copy()
     backend_env.pop("CONTRACT_LOCAL_DATA_ROOT", None)
+    backend_env["CONTRACT_LOCAL_PROCESSING"] = '1' if args.process_local else '0'
     if args.data_root:
         backend_env["CONTRACT_LOCAL_DATA_ROOT"] = str(args.data_root.resolve())
     frontend_env = os.environ.copy()
@@ -94,7 +97,10 @@ def run() -> int:
         else:
             raise RuntimeError("Local services did not become ready")
         print(f"Ready: http://127.0.0.1:{args.frontend_port}/ (API port {args.backend_port})")
-        print("Query mode: background processing and paid model calls are disabled.")
+        if args.process_local:
+            print("Local processing mode: background jobs enabled; paid model calls require separate authorization.")
+        else:
+            print("Query mode: background processing and paid model calls are disabled.")
         if args.smoke:
             print("Launcher smoke PASS")
             return 0

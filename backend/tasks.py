@@ -132,6 +132,7 @@ class TaskStore:
                     source TEXT NOT NULL CHECK (source IN ('upload', 'mock_pending')),
                     department TEXT NOT NULL,
                     applicant TEXT NOT NULL,
+                    business_type TEXT,
                     created_at TEXT NOT NULL,
                     current_document_version INTEGER NOT NULL,
                     current_review_version INTEGER,
@@ -189,6 +190,10 @@ class TaskStore:
                 self.auth_store.connection.execute(
                     "ALTER TABLE tasks ADD COLUMN mock_approval_id TEXT"
                 )
+            if "business_type" not in columns:
+                self.auth_store.connection.execute(
+                    "ALTER TABLE tasks ADD COLUMN business_type TEXT"
+                )
         self.jobs.initialize()
         self.rule_snapshots.initialize()
         self.model_budget.initialize()
@@ -209,6 +214,7 @@ class TaskStore:
         *,
         source: str = "upload",
         mock_approval_id: str | None = None,
+        business_type: str | None = None,
     ) -> dict:
         if actor.role != "business":
             raise ApiError(403, "FORBIDDEN", "无权执行此操作")
@@ -220,6 +226,8 @@ class TaskStore:
         applicant = applicant.strip()
         if not department or not applicant or len(department) > 120 or len(applicant) > 120:
             raise ApiError(422, "INVALID_REQUEST", "部门和申请人须为 1 至 120 个字符")
+        if business_type is not None and business_type != "软件采购":
+            raise ApiError(422, "INVALID_REQUEST", "当前演示仅支持软件采购业务类型")
         safe_name, file_format = identify_document(filename, content)
         task_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc).isoformat()
@@ -229,11 +237,11 @@ class TaskStore:
         with self.auth_store.lock, stored_attachment(file_path, content, new_task=True), self.auth_store.connection:
             self.auth_store.connection.execute(
                 """INSERT INTO tasks
-                (id, owner_user_id, source, department, applicant, created_at,
+                (id, owner_user_id, source, department, applicant, business_type, created_at,
                  current_document_version, machine_status, legal_status, writeback_status,
-                 mock_approval_id)
-                VALUES (?, ?, ?, ?, ?, ?, 1, 'pending', 'pending', 'not_written', ?)""",
-                (task_id, actor.id, source, department, applicant, now, mock_approval_id),
+                  mock_approval_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'pending', 'pending', 'not_written', ?)""",
+                (task_id, actor.id, source, department, applicant, business_type, now, mock_approval_id),
             )
             self.auth_store.connection.execute(
                 """INSERT INTO document_versions
@@ -660,6 +668,7 @@ class TaskStore:
             summary["submission"] = {
                 "department": row["department"],
                 "applicant": row["applicant"],
+                "business_type": row["business_type"],
                 "filename": row["original_filename"],
                 "format": row["format"],
                 "sha256": row["sha256"],
@@ -676,4 +685,24 @@ class TaskStore:
                 if row['legal_status'] == 'confirmed' and row['current_review_version'] is not None:
                     summary['risk_level'] = self.reviews.read(row['id'], actor,
                         row['current_document_version'], row['current_review_version'])['risk_level']
+                # Parsed fields belong to the current document only. A business user
+                # must not receive metadata from a version awaiting legal confirmation.
+                if actor.role == 'legal' or row['legal_status'] == 'confirmed':
+                    parsed = self.auth_store.connection.execute(
+                        'SELECT fields_json FROM parsed_documents WHERE task_id=? AND document_version=?',
+                        (row['id'], row['current_document_version']),
+                    ).fetchone()
+                    values = {'title': None, 'amount': None, 'currency': None}
+                    if parsed is not None:
+                        try:
+                            fields = json.loads(parsed['fields_json'])
+                        except (TypeError, ValueError):
+                            fields = []
+                        if isinstance(fields, list):
+                            for field in fields:
+                                if (isinstance(field, dict) and field.get('name') in values
+                                        and field.get('status') == 'identified'
+                                        and isinstance(field.get('value'), str)):
+                                    values[field['name']] = field['value']
+                    summary['contract'] = values
         return summary

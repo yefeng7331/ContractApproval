@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ApiError, loadTasks, request } from './api.ts';
-import { formalRisk, isActive, legalNames, machineNames, nextStep, phase, phases, roles, writebackNames } from './model.ts';
+import { ApiError, request } from './api.ts';
+import { contractAmount, contractTitle, formalRisk, formatTaskTime, legalNames, machineNames, nextStep, phase, phases, roles, writebackNames } from './model.ts';
 import type { Phase, Role, Session, Task } from './model.ts';
 import './style.css';
 import { Intake } from './Intake.tsx';
@@ -13,10 +13,11 @@ import { Recovery } from './Recovery.tsx';
 import { AuditEvents } from './AuditEvents.tsx';
 import { ProcessingRecords } from './ProcessingRecords.tsx';
 import { canReplace } from './intake.ts';
+import { startTaskPolling } from './taskPolling.ts';
 const Workbench = lazy(() => import('./Workbench.tsx').then(module => ({ default: module.Workbench })));
 
 const Brand = () => <div className="brand"><b>审</b><div>合同审查<small>CONTRACT REVIEW</small></div></div>;
-const date = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12: false });
+const date = formatTaskTime;
 
 function App() {
   // Session and protected views live only in memory; refresh requires login.
@@ -60,6 +61,7 @@ function Workspace({ session, onExit }: { session: Session; onExit: (message: st
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [forbidden, setForbidden] = useState(false);
   const [updated, setUpdated] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [reviewDirty, setReviewDirty] = useState(false);
@@ -75,22 +77,14 @@ function Workspace({ session, onExit }: { session: Session; onExit: (message: st
   const [page, setPage] = useState(0);
 
   useEffect(() => {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    async function update() {
-      try {
-        const data = await loadTasks(session.access_token, controller.signal);
-        if (controller.signal.aborted) return;
-        if (!reviewDirtyRef.current) { setTasks(data); setError(''); setUpdated(new Date().toLocaleTimeString('zh-CN', { hour12: false })); }
-        if (data.some(isActive)) timer = setTimeout(update, 5000);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        if (error instanceof ApiError && error.status === 401) onExit(error.message);
-        else if (!reviewDirtyRef.current) { setTasks([]); setError((error as Error).message); }
-      } finally { if (!controller.signal.aborted) setLoading(false); }
-    }
-    setLoading(true); void update();
-    return () => { controller.abort(); if (timer) clearTimeout(timer); };
+    setLoading(true);
+    return startTaskPolling({ token: session.access_token,
+       onTasks: data => { if (!reviewDirtyRef.current) { setTasks(data); setError(''); setForbidden(false); setUpdated(new Date().toLocaleTimeString('zh-CN', { hour12: false })); } },
+       onError: message => { if (!reviewDirtyRef.current) setError(message); },
+       onForbidden: message => { setTasks([]); setReceipt(null); setSelected(null); setIntake(false); setReviewDirty(false); setUpdated(''); setForbidden(true); setError(message); },
+      onExpired: onExit,
+      onSettled: () => setLoading(false),
+    });
   }, [session.access_token, refresh]);
 
   useEffect(() => {
@@ -131,8 +125,10 @@ function Workspace({ session, onExit }: { session: Session; onExit: (message: st
     <main className="workspace"><header><div><p className="eyebrow">{roles[role]} / 工作空间</p><h1>{intake ? '合同接入' : selected ? '任务进度' : '任务大盘'}</h1></div><span className="pill">{error ? '服务读取失败' : loading ? '正在读取服务' : '已连接本地服务'}</span></header>
       <div className="subhead"><p className="muted">{selected ? '当前文档的独立处理状态' : role === 'business' ? '本人任务的当前进度与下一步' : '可见任务的当前进度与下一步'}</p><div className="actions"><small aria-live="polite">{loading ? '正在读取…' : error ? '读取失败' : `更新于 ${updated}`}</small><button disabled={loading} onClick={() => { if (canLeaveReview()) { setReviewDirty(false); setWorkbenchEpoch(value => value + 1); setRefresh(value => value + 1); } }}>刷新任务</button></div></div>
       {receipt && <p className="notice" role="status">任务已登记：{receipt.task_id} · 文档 V{receipt.document_version}。{receipt.machine_status === 'blocked' ? `附件接入受阻：${receipt.blocked_reason ?? receipt.blocked_code}。请按任务指引处理。` : '附件已接收，请查看下方处理进度。'}</p>}
-      {intake && role === 'business' ? <Intake token={session.access_token} onCreated={created} onExpired={onExit} />
-        : error ? <section className="error" role="alert"><h2>任务读取失败</h2><p>{error}</p><button onClick={() => setRefresh(value => value + 1)}>重新读取</button></section>
+       {error && <section className="error" role="alert"><h2>{forbidden ? '无权访问任务' : '任务读取失败'}</h2><p>{forbidden ? `${error}。已隐藏当前任务信息。` : `${error}，正在重试；已有任务信息可能过期。`}</p><button onClick={() => setRefresh(value => value + 1)}>重新读取</button></section>}
+       {forbidden ? null
+         : intake && role === 'business' ? <Intake token={session.access_token} onCreated={created} onExpired={onExit} />
+        : error && !updated ? null
         : loading && !updated ? <section className="empty" aria-busy="true">正在读取当前账号可见的任务…</section>
         : selected ? <><button onClick={dashboard}>← 返回任务大盘</button>{task ? <><TaskDetail task={task} role={role} />{role === 'admin' && <><Recovery key={`${task.task_id}:${task.document_version}`} task={task} token={session.access_token} onExpired={onExit} onChanged={updated => { setTasks(current => current.map(item => item.task_id === updated.task_id ? updated : item)); setRefresh(value => value + 1); }} /><AuditEvents key={task.task_id} taskId={task.task_id} documentVersion={task.document_version} token={session.access_token} refresh={refresh} onExpired={onExit} /><ProcessingRecords key={task.task_id} taskId={task.task_id} documentVersion={task.document_version} token={session.access_token} refresh={refresh} onExpired={onExit} /></>}{role === 'legal' && <Suspense fallback={<p aria-busy="true">正在载入原文工作台…</p>}><Workbench key={`${task.task_id}:${task.document_version}:${task.review_version}:${workbenchEpoch}`} task={task} token={session.access_token} onExpired={onExit} onChanged={() => { setReviewDirty(false); setRefresh(value => value + 1); }} onDirtyChange={setReviewDirty} canLeave={canLeaveReview} /></Suspense>}{role === 'business' && canReplace(task) && <Replacement key={`${task.task_id}:${task.document_version}`} task={task} token={session.access_token} onSaved={created} onExpired={onExit} />}{role !== 'admin' && <Reports key={`${task.task_id}:${task.latest_confirmed_version?.review_version ?? 'none'}`} task={task} role={role} token={session.access_token} onExpired={onExit} />}{(role !== 'admin' || task.legal_status === 'confirmed') && <Writeback key={`${task.task_id}:${task.latest_confirmed_version?.review_version ?? task.review_version ?? 'none'}`} task={task} role={role} token={session.access_token} onExpired={onExit} />}</> : <section className="empty">任务已不存在或当前账号不可见，请返回大盘。</section>}</>
         : <>
@@ -143,7 +139,7 @@ function Workspace({ session, onExit }: { session: Session; onExit: (message: st
           <section className="panel"><div className="section-head"><div><h2>合同任务</h2><small>三组状态分别展示；机器完成不等于法务确认。</small></div><div className="filters"><label>当前阶段<select value={statusFilter} onChange={event => { setStatusFilter(event.target.value); setPage(0); }}><option value="all">全部阶段</option>{Object.entries(phases).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
             {role !== 'admin' && <label>正式等级<select value={riskFilter} onChange={event => { setRiskFilter(event.target.value); setPage(0); }}><option value="all">全部等级</option><option value="high">高风险</option><option value="medium">中风险</option><option value="low">低风险</option></select></label>}</div></div>
             {!filtered.length ? <div className="empty"><h3>{tasks.length ? '没有符合筛选条件的任务' : '还没有可见任务'}</h3><p className="muted">{tasks.length ? '调整筛选条件查看其他任务。' : role === 'business' ? '从左侧合同接入上传合成附件或导入模拟待办。' : '业务提交任务后将显示在这里。'}</p></div>
-              : <div className="table-wrap"><table><thead><tr><th>{role === 'admin' ? '任务 / 所属账号' : '合同 / 提交信息'}</th><th>机器审查</th><th>法务复核</th><th>模拟回写</th>{role !== 'admin' && <th>当前正式等级</th>}<th>下一步</th><th>操作</th></tr></thead><tbody>{filtered.slice(currentPage * 20, (currentPage + 1) * 20).map(task => <tr key={task.task_id}><td><strong>{role === 'admin' ? `任务 ${task.task_id.slice(0, 8)}` : task.submission?.filename ?? `任务 ${task.task_id.slice(0, 8)}`}</strong><small>{role === 'admin' ? task.owner_username : `${task.submission?.department ?? '未提供部门'} · ${task.submission?.applicant ?? task.owner_username}`}</small><small>文档 V{task.document_version}{task.review_version ? ` · 审查 V${task.review_version}` : ''}</small></td><td><span className={`pill ${task.machine_status === 'blocked' ? 'bad' : ''}`}>{machineNames[task.machine_status] ?? task.machine_status}</span></td><td>{legalNames[task.legal_status] ?? task.legal_status}</td><td>{writebackNames[task.writeback_status] ?? task.writeback_status}</td>{role !== 'admin' && <td>{formalRisk(task)}</td>}<td className="muted">{nextStep(task, role)}</td><td><button onClick={() => setSelected(task.task_id)} aria-label={`查看任务 ${task.task_id} 的进度`}>查看进度</button></td></tr>)}</tbody></table></div>}
+              : <div className="table-wrap"><table><thead><tr><th>{role === 'admin' ? '任务 / 所属账号' : '合同名称 / 提交信息'}</th>{role !== 'admin' && <th>金额</th>}<th>机器审查</th><th>法务复核</th><th>模拟回写</th>{role !== 'admin' && <th>当前正式等级</th>}<th>下一步</th><th>操作</th></tr></thead><tbody>{filtered.slice(currentPage * 20, (currentPage + 1) * 20).map(task => <tr key={task.task_id}><td><strong>{role === 'admin' ? `任务 ${task.task_id.slice(0, 8)}` : contractTitle(task)}</strong>{role !== 'admin' && <small>文件：{task.submission?.filename ?? '未记录'}</small>}<small>{role === 'admin' ? task.owner_username : `${task.submission?.department ?? '未提供部门'} · ${task.submission?.applicant ?? task.owner_username}`}</small>{role !== 'admin' && <small>业务类型：{task.submission?.business_type ?? '未记录'}</small>}<small>创建：{date(task.created_at)}（本机时间）</small><small>文档 V{task.document_version}{task.review_version ? ` · 审查 V${task.review_version}` : ''}</small></td>{role !== 'admin' && <td>{contractAmount(task)}</td>}<td><span className={`pill ${task.machine_status === 'blocked' ? 'bad' : ''}`}>{machineNames[task.machine_status] ?? task.machine_status}</span></td><td>{legalNames[task.legal_status] ?? task.legal_status}</td><td>{writebackNames[task.writeback_status] ?? task.writeback_status}</td>{role !== 'admin' && <td>{formalRisk(task)}</td>}<td className="muted">{nextStep(task, role)}</td><td><button onClick={() => setSelected(task.task_id)} aria-label={`查看任务 ${task.task_id} 的进度`}>查看进度</button></td></tr>)}</tbody></table></div>}
             <div className="pagination"><small>筛选结果 {filtered.length} 份 · 第 {currentPage + 1} / {Math.max(1, Math.ceil(filtered.length / 20))} 页</small><div className="actions"><button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button><button disabled={(currentPage + 1) * 20 >= filtered.length} onClick={() => setPage(currentPage + 1)}>下一页</button></div></div>
           </section>
         </>}
@@ -156,7 +152,7 @@ function TaskDetail({ task, role }: { task: Task; role: Role }) {
   return <section className="panel detail"><p className="eyebrow">{task.source === 'mock_pending' ? '模拟待办导入' : '本地上传'} · 文档 V{task.document_version}</p><h2>{role === 'admin' ? `任务 ${task.task_id.slice(0, 8)}` : task.submission?.filename ?? `任务 ${task.task_id.slice(0, 8)}`}</h2>
     <div className="status-strip"><div><small>机器审查</small><strong>{machineNames[task.machine_status] ?? task.machine_status}</strong></div><div><small>法务复核</small><strong>{legalNames[task.legal_status] ?? task.legal_status}</strong></div><div><small>模拟回写</small><strong>{writebackNames[task.writeback_status] ?? task.writeback_status}</strong></div></div>
     <div className={task.machine_status === 'blocked' ? 'error' : 'notice'}><strong>{nextStep(task, role)}</strong>{task.blocked_reason && <p>{task.blocked_reason}</p>}{task.blocked_code && <small>故障代码：{task.blocked_code}</small>}</div>
-    <dl><dt>任务 ID</dt><dd>{task.task_id}</dd><dt>所属账号</dt><dd>{task.owner_username}</dd><dt>建立时间</dt><dd>{date(task.created_at)}</dd><dt>当前审查版本</dt><dd>{task.review_version ? `V${task.review_version}` : '尚未形成'}</dd>{role !== 'admin' && <><dt>当前正式等级</dt><dd>{formalRisk(task)}</dd></>}</dl>
+    <dl><dt>任务 ID</dt><dd>{task.task_id}</dd><dt>所属账号</dt><dd>{task.owner_username}</dd><dt>建立时间</dt><dd>{date(task.created_at)}</dd>{role !== 'admin' && <><dt>合同名称</dt><dd>{contractTitle(task)}</dd><dt>金额</dt><dd>{contractAmount(task)}</dd></>}<dt>当前审查版本</dt><dd>{task.review_version ? `V${task.review_version}` : '尚未形成'}</dd>{role !== 'admin' && <><dt>当前正式等级</dt><dd>{formalRisk(task)}</dd></>}</dl>
     {role !== 'admin' && history && <p className="notice">最近确认结果属于文档 V{history.document_version} / 审查 V{history.review_version}。{history.document_version !== task.document_version || history.review_version !== task.review_version ? '此为历史确认版本，不代表当前文档结论。' : '此为当前确认版本。'}</p>}
     <p className="muted">{role === 'admin' ? '管理员仅查看处理状态、故障和操作记录元数据，不显示合同原文或法务意见。' : role === 'legal' ? '请在下方核对同版原文和机器草稿，逐项保存审查草稿并填写正式结论。' : '当前任务进度以已保存版本为准。'}</p>
   </section>;

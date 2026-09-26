@@ -6,7 +6,8 @@ export type Task = {
   machine_status: string; legal_status: string; writeback_status: string;
   blocked_code: string | null; blocked_reason: string | null; recovery_action: string | null;
   attempt_count: number;
-  submission?: { department: string; applicant: string; filename: string | null };
+  submission?: { department: string; applicant: string; business_type?: string | null; filename: string | null };
+  contract?: { title: string | null; amount: string | null; currency: string | null };
   risk_level?: string | null;
   latest_confirmed_version?: { document_version: number; review_version: number } | null;
 };
@@ -16,6 +17,18 @@ export type Phase = keyof typeof phases;
 export const machineNames: Record<string, string> = { pending: '等待处理', parsing: '解析中', reviewing: '审查中', completed: '草稿完成', blocked: '处理受阻' };
 export const legalNames: Record<string, string> = { pending: '待复核', in_review: '复核中', confirmed: '已确认' };
 export const writebackNames: Record<string, string> = { not_written: '未回写', writing: '模拟回写中', success: '模拟成功', failed: '模拟失败' };
+export function formatTaskTime(value: string): string {
+  const time = new Date(value);
+  return Number.isNaN(time.getTime()) ? '时间未记录' : time.toLocaleString('zh-CN', { hour12: false });
+}
+export function contractTitle(task: Task): string {
+  return task.contract ? task.contract.title ?? '未识别' : '待法务确认';
+}
+export function contractAmount(task: Task): string {
+  if (!task.contract) return '待法务确认';
+  if (!task.contract.amount) return '未识别';
+  return `${task.contract.amount}（${task.contract.currency ?? '币种未识别'}）`;
+}
 export function phase(task: Task): Phase {
   if (task.machine_status === 'blocked') return 'blocked';
   if (task.legal_status === 'confirmed') return 'confirmed';

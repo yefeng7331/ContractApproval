@@ -2,7 +2,7 @@ import { request } from './api.ts';
 import type { Task } from './model.ts';
 
 export const acceptedFiles = '.docx,.pdf,.png,.jpg,.jpeg,.tif,.tiff';
-export type PendingItem = { id: string; title: string; department: string; applicant: string; attachment_filename: string; synthetic: boolean };
+export type PendingItem = { id: string; title: string; department: string; applicant: string; business_type: string; attachment_filename: string; synthetic: boolean };
 
 export function canReplace(task: Task) {
   return (task.machine_status === 'blocked' && task.recovery_action === 'replace_attachment')
@@ -22,13 +22,14 @@ export function validateAttachment(file: File) {
   if (!acceptedFiles.split(',').some(extension => file.name.toLowerCase().endsWith(extension))) throw new Error('仅接受 DOCX、PDF、PNG、JPEG 或 TIFF。');
 }
 
-export function uploadContract(token: string, file: File, department: string, applicant: string, signal?: AbortSignal) {
+export function uploadContract(token: string, file: File, department: string, applicant: string, businessType: string, signal?: AbortSignal) {
   if (!department.trim() || !applicant.trim() || department.trim().length > 120 || applicant.trim().length > 120) {
     throw new Error('部门和申请人须为 1 至 120 个字符。');
   }
+  if (businessType !== '软件采购') throw new Error('当前演示仅支持软件采购业务类型。');
   validateAttachment(file);
   const body = new FormData();
-  body.set('file', file); body.set('department', department.trim()); body.set('applicant', applicant.trim());
+  body.set('file', file); body.set('department', department.trim()); body.set('applicant', applicant.trim()); body.set('business_type', businessType);
   return request<Task>('/tasks', token, signal, { method: 'POST', body });
 }
 

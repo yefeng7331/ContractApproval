@@ -8,6 +8,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 import httpx
 import uvicorn
 
@@ -16,6 +17,9 @@ from backend.docx_job import run_docx_once
 from backend.pdf_job import run_pdf_once
 from backend.ocr import run_ocr_once
 from backend.mock_pending import MOCK_PENDING_ID
+from backend.writeback import render_comment
+from samples.f6_pending_timeout import fetch_attachment
+from samples.f6_writeback_failure import MockCommentSink
 from tests import test_backend_integration as integration
 from tests import test_reviews as reviews
 
@@ -298,6 +302,219 @@ class LocalHttpAcceptanceTests(unittest.TestCase):
                          [('parse', 'completed')])
         self.assertEqual(self.request('GET', base + '/processing-records?document_version=1', 'admin').json(),
                          old_records)
+
+    def test_f5_encrypted_pdf_live_proxy_block_replacement_and_permissions(self):
+        task = self.upload('f5-encrypted.pdf')
+        base = f'/tasks/{task}'
+        self.assertEqual(run_pdf_once(self.tasks.jobs), {'status': 'blocked', 'code': 'PDF_ENCRYPTED'})
+        blocked = self.request('GET', base, 'owner').json()
+        self.assertEqual(blocked['document_version'], 1)
+        self.assertEqual(blocked['machine_status'], 'blocked')
+        self.assertEqual(blocked['blocked_code'], 'PDF_ENCRYPTED')
+        self.assertTrue(blocked['blocked_reason'])
+        self.assertEqual(blocked['recovery_action'], 'replace_attachment')
+        self.assertIsNone(blocked['risk_level'])
+        self.request('GET', base + '/document', code=409)
+        self.request('GET', base + '/risks/snapshot', code=409)
+        self.request('POST', base + '/confirm', code=409, json={
+            'document_version': 1, 'review_version': 1, 'conclusion': 'cannot confirm encrypted PDF',
+        })
+        self.request('POST', base + '/retry', 'admin', 409, json={'document_version': 1})
+        old_records = self.request('GET', base + '/processing-records?document_version=1', 'admin').json()
+        self.assertEqual([(item['stage'], item['status'], item['code']) for item in old_records['items']],
+                         [('parse', 'blocked', 'PDF_ENCRYPTED')])
+        self.request('GET', base + '/processing-records', 'owner', 403)
+
+        filename = 'f2-text-software-purchase.pdf'
+        payload = (integration.SAMPLES / filename).read_bytes()
+        def replacement(role, code, version):
+            return self.request('POST', base + '/documents', role, code,
+                data={'base_document_version': version}, files={'file': (filename, payload)})
+
+        replacement('legal', 403, 1)
+        replacement('admin', 403, 1)
+        replacement('other', 404, 1)
+        self.assertEqual(self.http.post('/api/v1' + base + '/documents',
+            data={'base_document_version': 1}, files={'file': (filename, payload)}).status_code, 401)
+        replacement('owner', 409, 2)
+        revised = replacement('owner', 201, 1).json()
+        self.assertEqual(revised['document_version'], 2)
+        self.assertEqual(revised['machine_status'], 'pending')
+        self.assertIsNone(revised['blocked_code'])
+        replacement('owner', 409, 1)
+        self.assertEqual(run_pdf_once(self.tasks.jobs)['status'], 'reviewing')
+        document = self.request('GET', base + '/document').json()
+        self.assertEqual(document['document_version'], 2)
+        self.assertTrue(document['normalized_text'])
+        self.request('GET', base + '/document?document_version=1', code=409)
+        self.request('GET', base + '/risks/snapshot', code=409)
+        new_records = self.request('GET', base + '/processing-records?document_version=2', 'admin').json()
+        self.assertEqual([(item['stage'], item['status']) for item in new_records['items']],
+                         [('parse', 'completed')])
+        self.assertEqual(self.request('GET', base + '/processing-records?document_version=1', 'admin').json(),
+                         old_records)
+
+    def test_f5_blurred_scan_live_proxy_block_replacement_and_permissions(self):
+        task = self.upload('f5-blurred-scan.png')
+        base = f'/tasks/{task}'
+        self.assertEqual(run_ocr_once(self.tasks.jobs), {'status': 'blocked', 'code': 'OCR_UNREADABLE'})
+        blocked = self.request('GET', base, 'owner').json()
+        self.assertEqual(blocked['document_version'], 1)
+        self.assertEqual(blocked['machine_status'], 'blocked')
+        self.assertEqual(blocked['blocked_code'], 'OCR_UNREADABLE')
+        self.assertTrue(blocked['blocked_reason'])
+        self.assertEqual(blocked['recovery_action'], 'replace_attachment')
+        self.assertIsNone(blocked['risk_level'])
+        self.request('GET', base + '/document', code=409)
+        self.request('GET', base + '/risks/snapshot', code=409)
+        self.request('POST', base + '/confirm', code=409, json={
+            'document_version': 1, 'review_version': 1, 'conclusion': 'cannot confirm unreadable scan',
+        })
+        self.request('POST', base + '/retry', 'admin', 409, json={'document_version': 1})
+        old_records = self.request('GET', base + '/processing-records?document_version=1', 'admin').json()
+        self.assertEqual([(item['stage'], item['status'], item['code']) for item in old_records['items']],
+                         [('parse', 'blocked', 'OCR_UNREADABLE')])
+        self.request('GET', base + '/processing-records', 'owner', 403)
+
+        filename = 'f3-clear-scan.png'
+        payload = (integration.SAMPLES / filename).read_bytes()
+        def replacement(role, code, version):
+            return self.request('POST', base + '/documents', role, code,
+                data={'base_document_version': version}, files={'file': (filename, payload)})
+
+        replacement('legal', 403, 1)
+        replacement('admin', 403, 1)
+        replacement('other', 404, 1)
+        self.assertEqual(self.http.post('/api/v1' + base + '/documents',
+            data={'base_document_version': 1}, files={'file': (filename, payload)}).status_code, 401)
+        replacement('owner', 409, 2)
+        revised = replacement('owner', 201, 1).json()
+        self.assertEqual(revised['document_version'], 2)
+        self.assertEqual(revised['machine_status'], 'pending')
+        self.assertIsNone(revised['blocked_code'])
+        replacement('owner', 409, 1)
+        self.assertEqual(run_ocr_once(self.tasks.jobs)['status'], 'reviewing')
+        document = self.request('GET', base + '/document').json()
+        self.assertEqual(document['document_version'], 2)
+        self.assertEqual(document['extraction_method'], 'ocr')
+        self.assertTrue(document['normalized_text'])
+        self.request('GET', base + '/document?document_version=1', code=409)
+        self.request('GET', base + '/risks/snapshot', code=409)
+        new_records = self.request('GET', base + '/processing-records?document_version=2', 'admin').json()
+        self.assertEqual([(item['stage'], item['status']) for item in new_records['items']],
+                         [('parse', 'completed')])
+        self.assertEqual(self.request('GET', base + '/processing-records?document_version=1', 'admin').json(),
+                         old_records)
+
+    def test_f6_writeback_failure_live_proxy_retry_dedup_and_permissions(self):
+        task = self.upload(integration.ORACLE['F1']['file'])
+        base = f'/tasks/{task}'
+        snapshot = self.machine(task, run_docx_once)
+        self.confirm(task, snapshot)
+        url = base + '/mock-writeback'
+        payload = {'review_version': 1, 'mock_approval_id': MOCK_PENDING_ID}
+
+        self.assertEqual(self.request('GET', url + '?review_version=1').json()['state'], 'not_written')
+        self.assertEqual(self.request('GET', '/mock-writeback-targets').json()['items'][0]['id'], MOCK_PENDING_ID)
+        self.request('POST', url, code=404, json={**payload, 'mock_approval_id': 'missing'})
+        self.request('POST', url, code=422, json={**payload, 'review_version': True})
+        for role in ('owner', 'other', 'admin'):
+            self.request('POST', url, role, 403, json=payload)
+            self.request('GET', '/mock-writeback-targets', role, 403)
+        self.request('GET', url + '?review_version=1', 'other', 404)
+        self.assertEqual(self.http.post('/api/v1' + url, json=payload).status_code, 401)
+
+        first = self.request('POST', url, json=payload).json()
+        self.assertEqual((first['state'], len(first['attempts'])), ('writing', 1))
+        self.assertEqual(len(self.request('POST', url, json=payload).json()['attempts']), 1)
+        sink = MockCommentSink()
+
+        def scripted_write(payload):
+            markdown = render_comment(payload)
+            sink.submit(task, payload['review_version'], MOCK_PENDING_ID, markdown)
+            return markdown
+
+        with patch('backend.writeback.render_comment', side_effect=scripted_write):
+            self.assertEqual(self.tasks.writebacks.run_next(), 'failed')
+            failed = self.request('GET', url + '?review_version=1').json()
+            self.assertEqual((failed['state'], failed['error'], failed['comment_id']),
+                             ('failed', 'MOCK_WRITEBACK_FAILED', None))
+            self.assertEqual([item['state'] for item in failed['attempts']], ['failed'])
+            self.assertEqual(sink.comment_count, 0)
+            self.assertEqual(self.request('POST', url, json=payload).json()['state'], 'writing')
+            self.assertEqual(self.tasks.writebacks.run_next(), 'success')
+
+        success = self.request('GET', url + '?review_version=1').json()
+        self.assertEqual(success['state'], 'success')
+        self.assertEqual([item['state'] for item in success['attempts']], ['failed', 'success'])
+        self.assertEqual(sink.comment_count, 1)
+        self.assertIn('模拟回写', success['markdown'])
+        duplicate = self.request('POST', url, json=payload).json()
+        self.assertEqual(duplicate['comment_id'], success['comment_id'])
+        self.assertEqual(len(duplicate['attempts']), 2)
+        self.assertEqual(sink.comment_count, 1)
+        self.request('POST', url, code=409, json={**payload, 'mock_approval_id': 'other-target'})
+        owner = self.request('GET', url + '?review_version=1', 'owner').json()
+        self.assertEqual(owner['markdown'], success['markdown'])
+        self.assertNotIn('attempts', owner)
+        self.assertNotIn('error', owner)
+        self.assertNotIn('markdown', self.request('GET', url + '?review_version=1', 'admin').json())
+
+    def test_f6_pending_attachment_timeout_live_proxy_admin_retry_and_permissions(self):
+        self.assertEqual(len(self.request('GET', '/mock-pending', 'owner').json()['items']), 1)
+        self.request('GET', '/mock-pending', 'legal', 403)
+        self.request('POST', f'/mock-pending/{MOCK_PENDING_ID}/import', 'admin', 403)
+        self.assertEqual(self.http.post(f'/api/v1/mock-pending/{MOCK_PENDING_ID}/import').status_code, 401)
+        with patch('backend.main.fetch_pending_attachment', side_effect=fetch_attachment) as fetch:
+            imported = self.request('POST', f'/mock-pending/{MOCK_PENDING_ID}/import', 'owner', 201).json()
+            task = imported['task_id']
+            base = f'/tasks/{task}'
+            self.assertEqual(imported['document_version'], 1)
+            self.assertEqual(imported['machine_status'], 'blocked')
+            self.assertEqual(imported['blocked_code'], 'ATTACHMENT_FETCH_TIMEOUT')
+            self.assertTrue(imported['blocked_reason'])
+            self.assertEqual(imported['recovery_action'], 'admin_retry')
+            self.assertEqual(imported['attempt_count'], 1)
+            self.assertIsNone(imported['submission']['sha256'])
+            self.assertIsNone(imported['risk_level'])
+            self.request('GET', base, 'other', 404)
+            self.request('GET', base + '/document', code=404)
+            self.request('GET', base + '/risks/snapshot', code=404)
+            self.request('POST', base + '/confirm', code=409, json={
+                'document_version': 1, 'review_version': 1, 'conclusion': 'cannot confirm missing attachment',
+            })
+            history = self.request('GET', base + '/attachment-attempts', 'admin').json()
+            self.assertEqual([(item['attempt'], item['state'], item['error_code']) for item in history['attempts']],
+                             [(1, 'failed', 'ATTACHMENT_FETCH_TIMEOUT')])
+            for role in ('owner', 'legal', 'other'):
+                self.request('GET', base + '/attachment-attempts', role, 403)
+                self.request('POST', base + '/retry', role, 403, json={'document_version': 1})
+            self.assertEqual(self.http.get('/api/v1' + base + '/attachment-attempts').status_code, 401)
+            self.assertEqual(self.http.post('/api/v1' + base + '/retry',
+                json={'document_version': 1}).status_code, 401)
+            self.request('POST', base + '/retry', 'admin', 409, json={'document_version': 2})
+            retried = self.request('POST', base + '/retry', 'admin', 200,
+                json={'document_version': 1}).json()
+            self.assertEqual(retried['document_version'], 1)
+            self.assertEqual(retried['attempt_count'], 2)
+            self.assertEqual(retried['machine_status'], 'pending')
+            self.assertTrue(self.request('GET', base, 'owner').json()['submission']['sha256'])
+            self.assertEqual([call.args[0] for call in fetch.call_args_list], [1, 2])
+            self.request('POST', base + '/retry', 'admin', 409, json={'document_version': 1})
+            history = self.request('GET', base + '/attachment-attempts', 'admin').json()
+            self.assertEqual([(item['attempt'], item['state']) for item in history['attempts']],
+                             [(1, 'failed'), (2, 'completed')])
+            self.assertEqual(history['attempts'][0]['error_code'], 'ATTACHMENT_FETCH_TIMEOUT')
+
+        self.assertEqual(run_docx_once(self.tasks.jobs)['status'], 'reviewing')
+        document = self.request('GET', base + '/document').json()
+        self.assertEqual(document['document_version'], 1)
+        self.assertTrue(document['normalized_text'])
+        self.assertEqual(self.tasks.rule_snapshots.run_next()['status'], 'completed')
+        snapshot = self.request('GET', base + '/risks/snapshot').json()
+        self.assertEqual(snapshot['document_version'], 1)
+        self.assertEqual({risk['rule_id'] for risk in snapshot['risks']}, {'DEMO-IP-01', 'DEMO-PAY-01'})
+        self.assertEqual(self.request('GET', base + '/attachment-attempts', 'admin').json(), history)
 
 
 if __name__ == '__main__':
